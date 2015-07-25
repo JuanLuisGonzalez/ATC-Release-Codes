@@ -5,7 +5,7 @@
  * Ethernet shield Module attached
  - For UNO pins 10, 11, 12 and 13 are dedicated
  - For MEGA pins 10, 50, 51 and 52 are dedicated
- * V26AD Parsic Italia SPI IO expander uses pin 2 and 3 as chip selects
+ * V26AD Parsic Italia SPI IO expander uses pin 3 and 4 as chip selects
 ,* Controls 8 relays, appliances, circuits, etc.
  * Relays connected to Parsic IO expander
  * Take analog samples from sensors connected to Parsic IO expander
@@ -45,7 +45,6 @@
 #include <EEPROM.h> 
 #include <SPI.h> 
 #include <Ethernet.h> 
-#include <Servo.h>
 
 //                     Bit meaning                                             Reset Value
 #define IODIRA   0x00 // IO7 IO6 IO5 IO4 IO3 IO2 IO1 IO0                         1111 1111
@@ -72,8 +71,9 @@
 #define GPIOB    0x19 // GP7 GP6 GP5 GP4 GP3 GP2 GP1 GP0                         0000 0000
 #define OLATB    0x1A // OL7 OL6 OL5 OL4 OL3 OL2 OL1 OL0                         0000 0000
 
-#define ChipSelect1 2
-#define ChipSelect2 3
+#define ChipSelect1 3
+#define ChipSelect2 4
+#define V26_ADDRESS 7
 
 // Special commands
 #define CMD_SPECIAL '<'
@@ -81,6 +81,8 @@
 
 // Number of relays
 #define MAX_RELAYS 8 
+#define MAX_INPUTS 3
+
 // Relay 1 will report status to toggle button and image 1, relay 2 to button 2 and so on.
 String RelayAppId[] = {
   "04", "05", "06", "07", "08", "09", "10", "11"};
@@ -96,7 +98,7 @@ int STATUS_EEADR = 20;
 
 // Used to prescale sample time
 int Prescaler = 0;
-boolean buttonLatch = false;
+boolean buttonLatch[MAX_INPUTS] = {false, false, false};
 
 // Enter a MAC address and IP address for your controller below. 
 // The IP address will be dependent on your local network: 
@@ -115,21 +117,14 @@ int Accel[3] = {
   0, 0, 0}; 
 int SeekBarValue[8] = {
   0,0,0,0,0,0,0,0};
-Servo mServo[2]; 
-
+  
 void setup() {    
   // start the Ethernet connection and the server: 
   Ethernet.begin(mac, ip); 
   server.begin();
 
-  // Initialize parsic board (address 0)
-  ParsicInit(0);
-
-  // Initialize servos
-  mServo[0].attach(8); 
-  mServo[0].write(90);   
-  mServo[1].attach(9); 
-  mServo[1].write(90);
+  // Initialize parsic board
+  ParsicInit(V26_ADDRESS);
 
   // Load last known status from eeprom 
   RelayStatus = EEPROM.read(STATUS_EEADR); 
@@ -165,14 +160,14 @@ void loop() {
     Prescaler = 0; // Reset prescaler 
 
     // Send 3 analog samples to be displayed at text tags 
-    iSample = ParsicAnalogRead(true, 0);   // Take sample
+    iSample = ParsicAnalogRead(0);   // Take sample
     sSample = String(iSample); // Convert into string
 
     // Example of how to display text in top of the app
     server.println("Sensor0: " + sSample);  
 
     // Example of how to use text and imgs tags 
-    iSample = ParsicAnalogRead(true, 1);  
+    iSample = ParsicAnalogRead(1);  
     sSample = String(iSample);
     server.println("<Text00:Temp1: " + sSample);
     if(iSample > 683)
@@ -182,7 +177,7 @@ void loop() {
     else
       server.println("<Imgs00:0"); // Default state    
 
-    iSample = ParsicAnalogRead(true, 2);
+    iSample = ParsicAnalogRead(2);
     sSample = String(iSample);
     server.println("<Text01:Speed2: " + sSample);
     if(iSample > 683)
@@ -192,7 +187,7 @@ void loop() {
     else
       server.println("<Imgs01:0"); // Default state    
 
-    iSample = ParsicAnalogRead(true, 3);  
+    iSample = ParsicAnalogRead(3);  
     sSample = String(iSample);
     server.println("<Text02:Photo3: " + sSample);
     if(iSample > 683)
@@ -202,7 +197,7 @@ void loop() {
     else
       server.println("<Imgs02:0"); // Default state    
 
-    iSample = ParsicAnalogRead(true, 4);
+    iSample = ParsicAnalogRead(4);
     sSample = String(iSample); 
     server.println("<Text03:Flux4: " + sSample);
     if(iSample > 683)
@@ -231,10 +226,9 @@ void loop() {
     // Character '[' is received every 2.5s, use
     // this event to tell the android all relay states 
     server.println("V26 Parsic Code"); 
-
     for(int i = 0; i < MAX_RELAYS; i++){ 
       // Refresh button states to app (<BtnXX:Y\n)
-      if(ParsicDigitalReadOutput(0, i)){ 
+      if(ParsicDigitalReadOutput(V26_ADDRESS, i)){ 
         server.println("<Butn" + RelayAppId[i] + ":1");
         server.println("<Imgs" + RelayAppId[i] + ":1");
       } 
@@ -258,17 +252,19 @@ void loop() {
     }
   } 
 
-  // Manual button
-  if(!ParsicDigitalRead(0, 0)){ // If button pressed
-    // don't change relay status until button has been released and pressed again
-    if(buttonLatch){ 
-      setRelayState(0, !ParsicDigitalReadOutput(0, 0)); // toggle relay 0 state
-      buttonLatch = false;                       
+    // Manual buttons on inputs
+  for(int i = 0; i < MAX_INPUTS; i++){
+    if(!ParsicDigitalRead(V26_ADDRESS, i)){ // If button pressed
+      // don't change relay status until button has been released and pressed again
+      if(buttonLatch[i]){ 
+        setRelayState(i, !ParsicDigitalReadOutput(V26_ADDRESS, i)); // toggle relay 0 state
+        buttonLatch[i] = false;                       
+      }
     }
-  }
-  else{
-    // button released, enable next push
-    buttonLatch = true;
+    else{
+      // button released, enable next push
+      buttonLatch[i] = true;
+    }
   }
   // ========================================================== 
 } 
@@ -278,7 +274,7 @@ void loop() {
 // state: 0 is off, 1 is on
 void setRelayState(int relay, int state){  
   if(state == 1){ 
-    ParsicDigitalWrite(0, relay, 1);                    // Write ouput port
+    ParsicDigitalWrite(V26_ADDRESS, relay, 1);                    // Write ouput port
     server.println("<Butn" + RelayAppId[relay] + ":1"); // Feedback button state to app
     server.println("<Imgs" + RelayAppId[relay] + ":1"); // Set image to pressed state
 
@@ -286,7 +282,7 @@ void setRelayState(int relay, int state){
     EEPROM.write(STATUS_EEADR, RelayStatus);        // Save new relay status
   } 
   else {
-    ParsicDigitalWrite(0, relay, 0);                    // Write ouput port
+    ParsicDigitalWrite(V26_ADDRESS, relay, 0);                    // Write ouput port
     server.println("<Butn" + RelayAppId[relay] + ":0"); // Feedback button state to app
     server.println("<Imgs" + RelayAppId[relay] + ":0"); // Set image to default state
 
@@ -318,8 +314,6 @@ void DecodeSpecialCommand(){
       Accel[0] = -commandData.substring(1, 6).toInt(); 
     else 
       Accel[0] = commandData.substring(1, 6).toInt(); 
-
-    mServo[0].write(((Accel[0] + 1000) * 9) / 100); 
   } 
 
   if(commandType.equals("AccY:")){ 
@@ -327,8 +321,6 @@ void DecodeSpecialCommand(){
       Accel[1] = -commandData.substring(1, 6).toInt(); 
     else 
       Accel[1] = commandData.substring(1, 6).toInt(); 
-
-    mServo[1].write(((Accel[1] + 1000) * 9) / 100); 
   } 
 
   if(commandType.equals("AccZ:")){ 
@@ -368,28 +360,26 @@ String Readln(){
 
 void ParsicInit(int devAdd){
   /*Special code for parsic*/
-  SPI.begin();                         // PINS 10, 11, 12 and 13 are blocked for uno clock at 4mhz, 
-  SPI.setClockDivider(SPI_CLOCK_DIV4); // 4 MHz
-  SPI.setDataMode(SPI_MODE0);          // Not sure about mode
-  SPI.setBitOrder(MSBFIRST);           // most significaptive bit first
   pinMode(ChipSelect1, OUTPUT);        // Chip Select Pin
   pinMode(ChipSelect2, OUTPUT);        // Chip Select Pin
   digitalWrite(ChipSelect1, HIGH);      // Active Low
   digitalWrite(ChipSelect2, HIGH);      // Active Low
-  pinMode(10, OUTPUT);                 // need to be output to not to affect spi system
-  digitalWrite(10, HIGH);
-  
+
   // Initialize Digital IO expander
-  WriteRegister(devAdd, IODIRA, 0x00); // set port A as output
-  WriteRegister(devAdd, IODIRB, 0xFF); // set port B as input
+  /* ERRATA: no matter if address pins are enabled or not, circuit will always take this pins intoaccount
+  *  Default address for parsic is 7 according circuit diagram
+  */
+  WriteRegister(0, 0xA0, 0xA8);        // all circuits start with 0 as address 
+  WriteRegister(devAdd, IODIRA, 0x00); // set port A as output (relays -  green LED)
+  WriteRegister(devAdd, IODIRB, 0xFF); // set port B as input (digital inputs - red LED)
 }
 
 void ParsicDigitalWrite(int devAdd, int pin, int aState){
   int currentStatus = ReadRegister(devAdd, OLATA);
   if(aState == 1)
-    WriteRegister(devAdd, GPIOA, currentStatus | (0x01 << pin));
+    WriteRegister(devAdd, OLATA, currentStatus | (0x01 << pin));
   else
-    WriteRegister(devAdd, GPIOA, currentStatus & (~(0x01 << pin)));  
+    WriteRegister(devAdd, OLATA, currentStatus & (~(0x01 << pin)));  
 }
 
 boolean ParsicDigitalReadOutput(int devAdd, int pin){
@@ -408,15 +398,16 @@ boolean ParsicDigitalRead(int devAdd, int pin){
 
 // Read operation
 // Send the data in the next order:
+// Single channel is always selected (not differential)
 //  SPI out: 0 0 0 0 0 0 0 1   single channel channel channel x x  x  x     x  x  x  x  x  x  x  x
 //  SPI in:  x x x x x x x x   x       x      x       x       x x B9 B8    B7 B6 B5 B4 B3 B2 B1 B0
-int ParsicAnalogRead(boolean single, int channel){
-  //digitalWrite(10, HIGH);              // Deactivate ethernet shiedl, pass communication control to parsic. Not sure if needed
-  digitalWrite(ChipSelect2, LOW);       // Active Low
+int ParsicAnalogRead(int channel){ 
+  digitalWrite(ChipSelect2, LOW);         // Active Low
   SPI.transfer(0x01);                   // Send leading zeroes
-  int msbyte = SPI.transfer(((single?0:1 << 3) | channel) << 4); // send channel and get most significative 2 bits
+  int msbyte = SPI.transfer(0x80 | ((channel & 0x07) << 4)); // send channel and get most significative 2 bits
+  msbyte &= 0x03;
   int lsbyte = SPI.transfer(0xFF);      // send dumy data and get least significative 8 bits
-  digitalWrite(ChipSelect2, HIGH);      // Active Low
+  digitalWrite(ChipSelect2, HIGH);        // Active Low
   return ((msbyte << 8) | lsbyte);
 }
 
@@ -426,10 +417,10 @@ int ParsicAnalogRead(boolean single, int channel){
 //  8 bit Register Address
 //  Last transaction will return register content
 int ReadRegister(int devAdd, int regAdd){
-  //digitalWrite(10, HIGH);              // Deactivate ethernet shiedl, pass communication control to parsic. Not sure if needed
   digitalWrite(ChipSelect1, LOW);       // Active Low
   SPI.transfer(0x40 | ((devAdd & 0x07) << 1) | 0x01);
-  int result = SPI.transfer(regAdd);
+  SPI.transfer(regAdd);
+  int result = SPI.transfer(0x00);    // dumy write
   digitalWrite(ChipSelect1, HIGH);      // Active Low
   return result;
 }
@@ -440,11 +431,9 @@ int ReadRegister(int devAdd, int regAdd){
 //  8 bit Register Address
 //  value to write into register
 void WriteRegister(int devAdd, int regAdd, int value){
-    //digitalWrite(10, HIGH);              // Deactivate ethernet shiedl, pass communication control to parsic. Not sure if needed
     digitalWrite(ChipSelect1, LOW);      // Active Low
     SPI.transfer(0x40 | ((devAdd & 0x07) << 1) | 0x00);
     SPI.transfer(regAdd);
     SPI.transfer(value);
     digitalWrite(ChipSelect1, HIGH);      // Active Low
 }
-
