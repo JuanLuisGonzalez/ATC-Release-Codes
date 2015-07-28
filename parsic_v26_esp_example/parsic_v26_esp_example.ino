@@ -1,16 +1,33 @@
-/*Arduino Total Control for Advanced programers
+/*Arduino Total Control ESP Firmware
  REMEMBER TO DISCONNECT BLUETOOT TX PIN WHEN UPLOADING SKETCH
  Basic functions to control and display information into the app.This code works for every arduino board.
  
- * Bluetooth Module attached to Serial port 
- * Controls 8 relays, appliances, circuits, etc.
- * Relays connected to Parsic IO expander
- * Take analog samples from sensors connected to Parsic IO expander
- * A button from GND to Parsic IO expander explains how to manualy turn on/off relays
- * Relay states are remembered
- * V26AD Parsic Italia SPI IO expander uses pin 4 and 3 as chip selects
+ ESP test on arduino pins serial 1 18 and 19
+ works well with 3.6V on vcc med overheat
+ Server on port "sPort":
+ Main commands
+ AT+RST
+ AT+GMR
+ AT+CWMODE=3
+ AT+CWJAP="Integra","6361726E65"
+ AT+CIFSR
+ AT+CIPMUX=1
+ AT+CIPSERVER=1,80
+ When data received: +IPD,0,2:[ (for this exaple 0 is the channel, and 2 is the data lenght)
+ Rare error down, blue module uses 1 as channel and black one uses 0
+ To send data AT+CIPSEND=0,3 (0: channel, 3 data size)
+
+ You may use the following to monitor what is coming into arduino
  
- To send data to app use tags:f
+  if(Serial1.available()){
+    Serial.write(Serial1.read());
+  }
+
+  if(Serial.available()){
+    Serial1.write(Serial.read());
+  }
+
+ To send data to app use tags:
  For buttons: (<ButnXX:Y\n), XX 0 to 19 is the button number, Y 0 or 1 is the state
  Example: Serial.println("<Butn05:1"); will turn the app button 5 on
  
@@ -34,7 +51,7 @@
     in m/s^2 multiplied by 100, example: 981 == 9.81m/s^2
  * "S" is the value sign (+ or -)
  
- TIP: To select another Serial port use ctr+f, find: Serial change to Serial
+ TIP: To select another Serial port use ctr+f, find: Serial change to SerialX
  
  Author: Juan Luis Gonzalez Bello 
  Date: June 2015
@@ -42,54 +59,34 @@
  ** After copy-paste of this code, use Tools -> Atomatic Format 
  */
 
-#include <EEPROM.h> 
+#include <EEPROM.h>
 
-//                     Bit meaning                                             Reset Value
-#define IODIRA   0x00 // IO7 IO6 IO5 IO4 IO3 IO2 IO1 IO0                         1111 1111
-#define IPOLA    0x01 // IP7 IP6 IP5 IP4 IP3 IP2 IP1 IP0                         0000 0000
-#define GPINTENA 0x02 // GPINT7 GPINT6 GPINT5 GPINT4 GPINT3 GPINT2 GPINT1 GPINT0 0000 0000
-#define DEFVALA  0x03 // DEF7 DEF6 DEF5 DEF4 DEF3 DEF2 DEF1 DEF0                 0000 0000
-#define INTCONA  0x04 // IOC7 IOC6 IOC5 IOC4 IOC3 IOC2 IOC1 IOC0                 0000 0000
-#define IOCON    0x05 // BANK MIRROR SEQOP DISSLW HAEN ODR INTPOL —             0000 0000
-#define GPPUA    0x06 // PU7 PU6 PU5 PU4 PU3 PU2 PU1 PU0                         0000 0000
-#define INTFA    0x07 // INT7 INT6 INT5 INT4 INT3 INT2 INT1 INTO                 0000 0000
-#define INTCAPA  0x08 // ICP7 ICP6 ICP5 ICP4 ICP3 ICP2 ICP1 ICP0                 0000 0000
-#define GPIOA    0x09 // GP7 GP6 GP5 GP4 GP3 GP2 GP1 GP0                         0000 0000
-#define OLATA    0x0A // OL7 OL6 OL5 OL4 OL3 OL2 OL1 OL0                         0000 0000
-
-#define IODIRB   0x10 // IO7 IO6 IO5 IO4 IO3 IO2 IO1 IO0                         1111 1111
-#define IPOLB    0x11 // IP7 IP6 IP5 IP4 IP3 IP2 IP1 IP0                         0000 0000
-#define GPINTENB 0x12 // GPINT7 GPINT6 GPINT5 GPINT4 GPINT3 GPINT2 GPINT1 GPINT0 0000 0000
-#define DEFVALB  0x13 // DEF7 DEF6 DEF5 DEF4 DEF3 DEF2 DEF1 DEF0                 0000 0000
-#define INTCONB  0x14 // IOC7 IOC6 IOC5 IOC4 IOC3 IOC2 IOC1 IOC0                 0000 0000
-#define IOCON    0x15 // BANK MIRROR SEQOP DISSLW HAEN ODR INTPOL —             0000 0000
-#define GPPUB    0x16 // PU7 PU6 PU5 PU4 PU3 PU2 PU1 PU0                         0000 0000
-#define INTFB    0x17 // INT7 INT6 INT5 INT4 INT3 INT2 INT1 INTO                 0000 0000
-#define INTCAPB  0x18 // ICP7 ICP6 ICP5 ICP4 ICP3 ICP2 ICP1 ICP0                 0000 0000
-#define GPIOB    0x19 // GP7 GP6 GP5 GP4 GP3 GP2 GP1 GP0                         0000 0000
-#define OLATB    0x1A // OL7 OL6 OL5 OL4 OL3 OL2 OL1 OL0                         0000 0000
+// Baud rate for ESP module
+#define BAUD_RATE 115200
+String sPort = "80";
 
 #define ChipSelect1 3
 #define ChipSelect2 4
-#define myMISO     12 // UNO: 12 MEGA: 50
-#define myMOSI     11 // UNO: 11 MEGA: 51
-#define mySCK      13 // UNO: 13 MEGA: 52
-#define mySS       10 // UNO: 10 MEGA: 53
+#define myMISO     50 // UNO: 12 MEGA: 50
+#define myMOSI     51 // UNO: 11 MEGA: 51
+#define mySCK      52 // UNO: 13 MEGA: 52
+#define mySS       53 // UNO: 10 MEGA: 53
 #define V26_ADDRESS 7
-
-// Baud rate for bluetooth module
-// (Default 9600 for most modules)
-#define BAUD_RATE 115200  
 
 // Special commands
 #define CMD_SPECIAL '<'
 #define CMD_ALIVE   '['
+
+// Data and variables received from especial command
+int Accel[3] = {0, 0, 0}; 
+int SeekBarValue[8] = {0,0,0,0,0,0,0,0};
 
 // Number of relays
 #define MAX_RELAYS 8 
 #define MAX_INPUTS 3
 
 // Relay 1 will report status to toggle button and image 1, relay 2 to button 2 and so on.
+boolean buttonLatch[] = {false, false, false};
 String RelayAppId[] = {"04", "05", "06", "07", "08", "09", "10", "11"};
 // Command list (turn on - off for eachr relay)
 const char CMD_ON[] = {'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'};
@@ -98,20 +95,11 @@ const char CMD_OFF[] = {'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l'};
 // Used to keep track of the relay status in EEPROM
 int RelayStatus = 0; 
 int STATUS_EEADR = 20; 
-
-// Used to prescale sample time
 int Prescaler = 0;
-boolean buttonLatch[] = {false, false, false};
-
-// Data and variables received from especial command
-int Accel[3] = {0, 0, 0}; 
-int SeekBarValue[8] = {0,0,0,0,0,0,0,0};
 
 void setup() {   
-  // initialize BT Serial port
-  Serial.begin(BAUD_RATE);  
-   
-  // Initialize parsic board
+  Serial.begin(BAUD_RATE);
+  myESP_Init();
   ParsicInit(V26_ADDRESS);
 
   // Load last known status from eeprom 
@@ -119,121 +107,110 @@ void setup() {
   for(int i = 0; i < MAX_RELAYS; i++){ 
     // Turn on and off according to relay status
     String stringNumber = String(i);
-    if((RelayStatus & (1 << i)) == 0){ 
+    if((RelayStatus & (1 << i)) == 0)
       ParsicDigitalWrite(V26_ADDRESS, i, 0);
-      Serial.println("<Butn" + RelayAppId[i] + ":0");
-    } 
-    else {
+    else 
       ParsicDigitalWrite(V26_ADDRESS, i, 1); 
-      Serial.println("<Butn" + RelayAppId[i] + ":1");      
-    }  
-  } 
-
-  // Greet arduino total control on top of the app
-  Serial.println("Thanks for your support!"); 
-  
-  // Make the app talk in english (lang number 00, use 01 to talk in your default language)
-  Serial.println("<TtoS00: Welcome to Arduino Total Control");
+  }   
+  pinMode(13, OUTPUT);
 } 
 
 void loop() { 
-  String sSample; 
-  String sSampleNo;  
-  int iSample; 
-  int appData; 
-
+  int appData = -1; 
+  int iSample = 0;
+  String appMessage;
+  String sSample = "";
   delay(1); 
   
   // This is true each 1/10 second approx. 
-  if(Prescaler++ > 100){ 
+  if(false){//Prescaler++ > 1000){ 
     Prescaler = 0; // Reset prescaler 
 
-    // Send 5 analog samples from V26 to be displayed at text tags 
-    iSample = ParsicAnalogRead(0);  // Take sample from channel 0
-    sSample = String(iSample); // Convert into string
-
-    // Example of how to display text in top of the app
-    Serial.println("Sensor0: " + sSample);  
-
+    // Send 4 analog samples from V26 to be displayed at text tags 
     // Example of how to use text and imgs tags 
     iSample = ParsicAnalogRead(1);
     sSample = String(iSample);
-    Serial.println("<Text00:Temp1: " + sSample);
+    myESP_Println("<Text00:Temp1: " + sSample, 0);
     if(iSample > 683)
-      Serial.println("<Imgs00:1"); // Pressed state
+      myESP_Println("<Imgs00:1", 0); // Pressed state
     else if(iSample > 341)
-      Serial.println("<Imgs00:2"); // Extra state
+      myESP_Println("<Imgs00:2", 0); // Extra state
     else
-      Serial.println("<Imgs00:0"); // Default state    
+      myESP_Println("<Imgs00:0", 0); // Default state    
 
     iSample = ParsicAnalogRead(2);
     sSample = String(iSample);
-    Serial.println("<Text01:Speed2: " + sSample);
+    myESP_Println("<Text01:Speed2: " + sSample, 0);
     if(iSample > 683)
-      Serial.println("<Imgs01:1"); // Pressed state
+      myESP_Println("<Imgs01:1", 0); // Pressed state
     else if(iSample > 341)
-      Serial.println("<Imgs01:2"); // Extra state
+      myESP_Println("<Imgs01:2", 0); // Extra state
     else
-      Serial.println("<Imgs01:0"); // Default state    
+      myESP_Println("<Imgs01:0", 0); // Default state    
       
     iSample = ParsicAnalogRead(3);
     sSample = String(iSample);
-    Serial.println("<Text02:Photo3: " + sSample);
+    myESP_Println("<Text02:Photo3: " + sSample, 0);
     if(iSample > 683)
-      Serial.println("<Imgs02:1"); // Pressed state
+      myESP_Println("<Imgs02:1", 0); // Pressed state
     else if(iSample > 341)
-      Serial.println("<Imgs02:2"); // Extra state
+      myESP_Println("<Imgs02:2", 0); // Extra state
     else
-      Serial.println("<Imgs02:0"); // Default state    
+      myESP_Println("<Imgs02:0", 0); // Default state    
      
     iSample = ParsicAnalogRead(4);
     sSample = String(iSample); 
-    Serial.println("<Text03:Flux4: " + sSample);
+    myESP_Println("<Text03:Flux4: " + sSample, 0);
     if(iSample > 683)
-      Serial.println("<Imgs03:1"); // Pressed state
+      myESP_Println("<Imgs03:1", 0); // Pressed state
     else if(iSample > 341)
-      Serial.println("<Imgs03:2"); // Extra state
+      myESP_Println("<Imgs03:2", 0); // Extra state
     else
-      Serial.println("<Imgs03:0"); // Default state      
+      myESP_Println("<Imgs03:0", 0); // Default state      
   } 
   
   // =========================================================== 
   // This is the point were you get data from the App 
-  appData = Serial.read();   // Get a byte from app, if available 
+  if(Serial1.available()){
+    appMessage = myESP_Read(0);    // Read channel 0
+    appData = appMessage.charAt(0);
+  }
   switch(appData){ 
   case CMD_SPECIAL: 
-    // Special command received 
-    DecodeSpecialCommand();
-    analogWrite(13, SeekBarValue[0]);
+    // Special command received, seekbar value and accel value updates 
+    DecodeSpecialCommand(appMessage.substring(1));// we already have the data :)
+    analogWrite(13, SeekBarValue[5]);
     break; 
 
   case CMD_ALIVE: 
-    // Character '[' is received every 2.5s, use
-    // this event to tell the android all relay states 
-    Serial.println("V26 Parsic Code");
+    // Character '[' is received every 2.5s
+    myESP_Println("ATC using ESP8266 ready", 0);
     for(int i = 0; i < MAX_RELAYS; i++){ 
       // Refresh button states to app (<BtnXX:Y\n)
       if(ParsicDigitalReadOutput(V26_ADDRESS, i)){ 
-        Serial.println("<Butn" + RelayAppId[i] + ":1");
-        Serial.println("<Imgs" + RelayAppId[i] + ":1");
+        myESP_Println("<Butn" + RelayAppId[i] + ":1", 0);
+        myESP_Println("<Imgs" + RelayAppId[i] + ":1", 0);
       } 
       else {
-        Serial.println("<Butn" + RelayAppId[i] + ":0"); 
-        Serial.println("<Imgs" + RelayAppId[i] + ":0");
+        myESP_Println("<Butn" + RelayAppId[i] + ":0", 0); 
+        myESP_Println("<Imgs" + RelayAppId[i] + ":0", 0);
       } 
     } 
     break;
- 
+
   default:
     // If not '<' or '[' then appData may be for relays
     for(int i = 0; i < MAX_RELAYS; i++){
       if(appData == CMD_ON[i]){
+        digitalWrite(13, HIGH);
         // Example of how to make beep alarm sound
-        Serial.println("<Alrm00");
+        myESP_Println("<Alrm00", 0);
         setRelayState(i, 1);
       }
-      else if(appData == CMD_OFF[i])
+      else if(appData == CMD_OFF[i]){
+        digitalWrite(13, LOW);
         setRelayState(i, 0);
+      }
     }
   } 
 
@@ -260,16 +237,17 @@ void loop() {
 void setRelayState(int relay, int state){  
   if(state == 1){ 
     ParsicDigitalWrite(V26_ADDRESS, relay, 1);          // Write ouput port
-    Serial.println("<Butn" + RelayAppId[relay] + ":1"); // Feedback button state to app
-    Serial.println("<Imgs" + RelayAppId[relay] + ":1"); // Set image to pressed state
+    myESP_Println("<Butn" + RelayAppId[relay] + ":1\n<Imgs" + RelayAppId[relay] + ":1" , 0); // Feedback button state to app
+    //myESP_Println("<Butn" + RelayAppId[relay] + ":1", 0); // Feedback button state to app
+    //myESP_Println("<Imgs" + RelayAppId[relay] + ":1", 0); // Set image to pressed state
     
     RelayStatus |= (0x01 << relay);                 // Set relay status
     EEPROM.write(STATUS_EEADR, RelayStatus);        // Save new relay status
   } 
   else {
     ParsicDigitalWrite(V26_ADDRESS, relay, 0);          // Write ouput port
-    Serial.println("<Butn" + RelayAppId[relay] + ":0"); // Feedback button state to app
-    Serial.println("<Imgs" + RelayAppId[relay] + ":0"); // Set image to default state
+    myESP_Println("<Butn" + RelayAppId[relay] + ":0\n<Imgs" + RelayAppId[relay] + ":0" , 0); // Feedback button state to app
+    //myESP_Println("<Imgs" + RelayAppId[relay] + ":0", 0); // Set image to default state
    
     RelayStatus &= ~(0x01 << relay);                // Clear relay status
     EEPROM.write(STATUS_EEADR, RelayStatus);        // Save new relay status
@@ -284,13 +262,9 @@ void setRelayState(int relay, int state){
 //   None 
 // Output: 
 //   None 
-void DecodeSpecialCommand(){ 
-  // Read the hole command 
-  String thisCommand = Readln(); 
-
+void DecodeSpecialCommand(String thisCommand){ 
   // First 5 characters will tell us the command type 
   String commandType = thisCommand.substring(0, 5); 
-
   // Next 6 characters will tell us the command data 
   String commandData = thisCommand.substring(5, 11);    
 
@@ -332,8 +306,8 @@ String Readln(){
   while(inByte != '\n'){ 
     inByte = -1; 
 
-    if (Serial.available() > 0) 
-      inByte = Serial.read(); 
+    if (Serial1.available() > 0) 
+      inByte = Serial1.read(); 
 
     if(inByte != -1) 
       message.concat(String(inByte)); 
@@ -341,6 +315,81 @@ String Readln(){
 
   return message; 
 }
+
+// Set up wifi module on Serial1, esp on channel 0
+void myESP_Init(){
+  // Initialize serial port
+  Serial1.begin(BAUD_RATE);
+  pinMode(19, INPUT_PULLUP);
+  
+  // Reset module
+  Serial1.println("AT+RST");
+  delay(4000);
+  Serial1.println("AT+CIPMUX=1");
+  delay(500);
+  Serial1.println("AT+CIPSERVER=1," + sPort);
+  delay(500);
+}
+
+// Send string data to app
+void myESP_Println(String data, int channel){
+  // Get data size, add 2 for nl and cr
+  int dataSize = data.length() + 2;
+  
+  // submit cipsend command for channel
+  Serial1.println("AT+CIPSEND=" + String(channel) + "," + String(dataSize));
+  delay(10); // needed?
+  
+  // Print actual data
+  Serial1.println(data);
+  delay(30);
+}
+
+// Receive string data from app (a char can be tough as a single character string)
+// remember: +IPD,0,2:[ (for this exaple 0 is the channel, and 2 is the data lenght)
+String myESP_Read(int channel){
+  String dataFromClient = "";
+  String message = "";
+  
+  // only if character '+' is received
+  if(Serial1.read() == '+'){
+    dataFromClient = Readln();                                   // read the whole line
+    String sCommand = dataFromClient.substring(0, 3);
+    if(sCommand.equals("IPD")){                                  // check this is actually the command we expect
+      int clientChannel = dataFromClient.charAt(4) & ~0x30;      // convert to int
+      if(clientChannel == channel){                              // only return data if it is from the intended channel
+         int twoPointsIndex = dataFromClient.indexOf(':');       // find the ':' on the command
+         message = dataFromClient.substring(twoPointsIndex + 1); // set the message
+      }
+    }
+  }
+  return message;
+}
+
+//                     Bit meaning                                             Reset Value
+#define IODIRA   0x00 // IO7 IO6 IO5 IO4 IO3 IO2 IO1 IO0                         1111 1111
+#define IPOLA    0x01 // IP7 IP6 IP5 IP4 IP3 IP2 IP1 IP0                         0000 0000
+#define GPINTENA 0x02 // GPINT7 GPINT6 GPINT5 GPINT4 GPINT3 GPINT2 GPINT1 GPINT0 0000 0000
+#define DEFVALA  0x03 // DEF7 DEF6 DEF5 DEF4 DEF3 DEF2 DEF1 DEF0                 0000 0000
+#define INTCONA  0x04 // IOC7 IOC6 IOC5 IOC4 IOC3 IOC2 IOC1 IOC0                 0000 0000
+#define IOCON    0x05 // BANK MIRROR SEQOP DISSLW HAEN ODR INTPOL —             0000 0000
+#define GPPUA    0x06 // PU7 PU6 PU5 PU4 PU3 PU2 PU1 PU0                         0000 0000
+#define INTFA    0x07 // INT7 INT6 INT5 INT4 INT3 INT2 INT1 INTO                 0000 0000
+#define INTCAPA  0x08 // ICP7 ICP6 ICP5 ICP4 ICP3 ICP2 ICP1 ICP0                 0000 0000
+#define GPIOA    0x09 // GP7 GP6 GP5 GP4 GP3 GP2 GP1 GP0                         0000 0000
+#define OLATA    0x0A // OL7 OL6 OL5 OL4 OL3 OL2 OL1 OL0                         0000 0000
+
+#define IODIRB   0x10 // IO7 IO6 IO5 IO4 IO3 IO2 IO1 IO0                         1111 1111
+#define IPOLB    0x11 // IP7 IP6 IP5 IP4 IP3 IP2 IP1 IP0                         0000 0000
+#define GPINTENB 0x12 // GPINT7 GPINT6 GPINT5 GPINT4 GPINT3 GPINT2 GPINT1 GPINT0 0000 0000
+#define DEFVALB  0x13 // DEF7 DEF6 DEF5 DEF4 DEF3 DEF2 DEF1 DEF0                 0000 0000
+#define INTCONB  0x14 // IOC7 IOC6 IOC5 IOC4 IOC3 IOC2 IOC1 IOC0                 0000 0000
+#define IOCON    0x15 // BANK MIRROR SEQOP DISSLW HAEN ODR INTPOL —             0000 0000
+#define GPPUB    0x16 // PU7 PU6 PU5 PU4 PU3 PU2 PU1 PU0                         0000 0000
+#define INTFB    0x17 // INT7 INT6 INT5 INT4 INT3 INT2 INT1 INTO                 0000 0000
+#define INTCAPB  0x18 // ICP7 ICP6 ICP5 ICP4 ICP3 ICP2 ICP1 ICP0                 0000 0000
+#define GPIOB    0x19 // GP7 GP6 GP5 GP4 GP3 GP2 GP1 GP0                         0000 0000
+#define OLATB    0x1A // OL7 OL6 OL5 OL4 OL3 OL2 OL1 OL0                         0000 0000
 
 void ParsicInit(int devAdd){
   /*Special code for parsic*/
@@ -449,3 +498,4 @@ int mySPI_Exchange(int data){
   while(!(SPSR & (1 << 7)));
   return SPDR;
 }
+
