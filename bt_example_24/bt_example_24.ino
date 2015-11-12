@@ -3,11 +3,10 @@
  Basic functions to control and display information into the app.This code works for every arduino board.
 
  * Bluetooth Module attached to Serial port
-, * Controls 8 relays, appliances, circuits, etc. (for n relays check uno/mega code)
+, * Controls 24 relays, appliances, circuits, etc. (for n relays check uno/mega code)
  * Relays connected to RelayPins[MAX_RELAYS]
  * Take analog samples from sensors connected to A0 to A4
  * A button from GND to A5 explains how to manualy turn on/off relay 0
- * Pins 8 and 9 are used to control a couple of servos via accelerometer data
  * Relay states are remembered
 
  To send data to app use tags:f
@@ -25,10 +24,14 @@
  Make the app talk: Text to Speech tag <TtoS0X:YYYY\n, X is 0 for english and 1 for your default language, YYYY... is any string
  Example: Serial.println("<TtoS00:Hello world");
 
+ Change the seek bar values in app: <SkbX:YYY\n, where X is the seek bar number from 0 to 7, and YYY is the seek bar value
+
  If a  no tag new line ending string is sent, it will be displayed at the top of the app
  Example: Serial.println("Hello Word"); "Hello Word" will be displayed at the top of the app
 
  Special information can be received from app, for example sensor data and seek bar info:
+ * "<PadXxx:YYY\n, xx 00 to 24 is the touch pad number, YYY is the touch pad X axis data 0 to 255
+ * "<PadYxx:YYY\n, xx 00 to 24 is the touch pad number, YYY is the touch pad Y axis data 0 to 255
  * "<SkbX:SYYYYY\n", X 0 to 7 is the seek bar number, YYYYY is the seek bar value from 0 to 255
  * "<AccX:SYYYYY\n", X can be "X,Y or Z" is the accelerometer axis, YYYYY is the accelerometer value
     in m/s^2 multiplied by 100, example: 981 == 9.81m/s^2
@@ -37,13 +40,12 @@
  TIP: To select another serial port use ctr+f, find: Serial change to Serial
 
  Author: Juan Luis Gonzalez Bello
- Date: March 2015
+ Date: November 2015
  Get the app: https://play.google.com/store/apps/details?id=com.apps.emim.btrelaycontrol
  ** After copy-paste of this code, use Tools -> Atomatic Format
  */
 
 #include <EEPROM.h>
-#include <Servo.h>
 
 // Baud rate for bluetooth module
 // (Default 9600 for most modules)
@@ -82,6 +84,7 @@ int ButtonPins[] = {A5, 27, 28};
 // Data and variables received from especial command
 int Accel[3] = {0, 0, 0};
 int SeekBarValue[8] = {0,0,0,0,0,0,0,0};
+int TouchPadData[24][2]; // 24 max touch pad objects, each one has 2 axis (x and Y)
 
 unsigned long myRead32(int address){
   int a32bitNumber = ((int)EEPROM.read(address) << 24)     | ((int)EEPROM.read(address + 1) << 16) | 
@@ -109,6 +112,13 @@ void setup() {
   // Initialize Output PORTS
   for(int i = 0; i < MAX_RELAYS; i++){
     pinMode(RelayPins[i], OUTPUT);
+  }
+
+  // Initialize touch pad data, 
+  // this is to avoid having random numbers in them
+  for(int i = 0; i < 24; i++){
+    TouchPadData[i][0] = 0; //X
+    TouchPadData[i][1] = 0; //Y
   }
 
   // Load last known status from eeprom
@@ -201,7 +211,9 @@ void loop() {
   case CMD_SPECIAL:
     // Special command received
     DecodeSpecialCommand();
-    analogWrite(13, SeekBarValue[0]);
+
+     // Example of how to use seek bar data
+    analogWrite(13, SeekBarValue[5]);
     break;
 
   case CMD_ALIVE:
@@ -218,6 +230,15 @@ void loop() {
         Serial.println("<Imgs" + RelayAppId[i] + ":0");
       }
     }
+    // If you need to update the seek bar values uncomment the below code
+    // WARNING increase the baud rate up to 115200 in order to have a
+    // smooth operation
+    // Update seekbar Values
+    /*
+    for(int i = 0; i < 8; i++){
+      Serial.println("<Skb" + String(i) + ":" + SBtoString(SeekBarValue[i]));
+    }
+    */
     break;
 
   default:
@@ -250,6 +271,17 @@ void loop() {
   // ==========================================================
 }
 
+String SBtoString(int value){
+  String sValue = "";
+  if(value < 10)
+    sValue = "00" + String(value);
+  else if (value < 100)
+    sValue = "0" + String(value);
+  else
+    sValue = String(value);
+  return sValue; 
+}
+
 // Sets the relay state for this example
 // relay: 0 to 7 relay number
 // state: 0 is off, 1 is on
@@ -272,6 +304,7 @@ void setRelayState(int relay, int state){
   }
 }
 
+
 // DecodeSpecialCommand
 //
 // A '<' flags a special command comming from App. Use this function
@@ -281,16 +314,15 @@ void setRelayState(int relay, int state){
 // Output:
 //   None
 void DecodeSpecialCommand(){
-  // Read the hole command
+  // Read the whole command
   String thisCommand = Readln();
 
   // First 5 characters will tell us the command type
   String commandType = thisCommand.substring(0, 5);
 
-  // Next 6 characters will tell us the command data
-  String commandData = thisCommand.substring(5, 11);
-
   if(commandType.equals("AccX:")){
+    // Next 6 characters will tell us the command data
+    String commandData = thisCommand.substring(5, 11);
     if(commandData.charAt(0) == '-') // Negative acceleration
       Accel[0] = -commandData.substring(1, 6).toInt();
     else
@@ -298,6 +330,8 @@ void DecodeSpecialCommand(){
   }
 
   if(commandType.equals("AccY:")){
+    // Next 6 characters will tell us the command data
+    String commandData = thisCommand.substring(5, 11);
     if(commandData.charAt(0) == '-') // Negative acceleration
       Accel[1] = -commandData.substring(1, 6).toInt();
     else
@@ -305,13 +339,33 @@ void DecodeSpecialCommand(){
   }
 
   if(commandType.equals("AccZ:")){
+    // Next 6 characters will tell us the command data
+    String commandData = thisCommand.substring(5, 11);
     if(commandData.charAt(0) == '-') // Negative acceleration
       Accel[2] = -commandData.substring(1, 6).toInt();
     else
       Accel[2] = commandData.substring(1, 6).toInt();
   }
 
+  if(commandType.substring(0, 4).equals("PadX")){
+    // Next 2 characters will tell us the touch pad number
+    int padNumber = thisCommand.substring(4, 6).toInt();
+    // Next 3 characters are the X axis data in the message
+    String commandData = thisCommand.substring(8, 13);
+    TouchPadData[padNumber][0] = commandData.toInt();
+  }
+
+  if(commandType.substring(0, 4).equals("PadY")){
+    // Next 2 characters will tell us the touch pad number
+    int padNumber = thisCommand.substring(4, 6).toInt();
+    // Next 3 characters are the Y axis data in the message
+    String commandData = thisCommand.substring(8, 13);
+    TouchPadData[padNumber][1] = commandData.toInt();
+  }
+
   if(commandType.substring(0, 3).equals("Skb")){
+    // Next 6 characters will tell us the command data
+    String commandData = thisCommand.substring(5, 11);
     int sbNumber = commandType.charAt(3) & ~0x30;
     SeekBarValue[sbNumber] = commandData.substring(1, 6).toInt();
   }
