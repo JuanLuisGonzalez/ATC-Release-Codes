@@ -16,7 +16,6 @@
  */
 
 #include <EEPROM.h>
-#include <Servo.h>
 
 // Baud rate for bluetooth module
 // (Default 9600 for most modules)
