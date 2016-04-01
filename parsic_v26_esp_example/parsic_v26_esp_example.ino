@@ -391,6 +391,14 @@ String myESP_Read(int channel){
 #define GPIOB    0x19 // GP7 GP6 GP5 GP4 GP3 GP2 GP1 GP0                         0000 0000
 #define OLATB    0x1A // OL7 OL6 OL5 OL4 OL3 OL2 OL1 OL0                         0000 0000
 
+#define ChipSelect1 3
+#define ChipSelect2 4
+#define myMISO     50 // UNO: 12 MEGA: 50
+#define myMOSI     51 // UNO: 11 MEGA: 51
+#define mySCK      52 // UNO: 13 MEGA: 52
+#define mySS       53 // UNO: 10 MEGA: 53
+#define V26_ADDRESS 7
+
 void ParsicInit(int devAdd){
   /*Special code for parsic*/
   pinMode(ChipSelect1, OUTPUT);        // Chip Select Pin

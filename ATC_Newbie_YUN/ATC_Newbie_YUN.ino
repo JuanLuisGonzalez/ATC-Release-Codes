@@ -109,4 +109,7 @@ void loop() {
     break; 
   }   
   // ========================================================== 
+
+  // If having problems reconecting enable next line
+  //client.stop();
 }
