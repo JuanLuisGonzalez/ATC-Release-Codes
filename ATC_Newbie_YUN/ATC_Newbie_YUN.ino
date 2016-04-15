@@ -32,6 +32,8 @@ YunClient client;
 void setup() {
   // Bridge startup, set up comm between arduino an wifi module
   Bridge.begin();
+  delay(100);
+  pinMode(0, INPUT_PULLUP);
 
   // Listen for incoming connections
   // Arduino acts as a TCP/IP server

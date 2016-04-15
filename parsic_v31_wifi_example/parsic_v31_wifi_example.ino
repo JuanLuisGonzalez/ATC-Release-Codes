@@ -133,6 +133,7 @@ int STATUS_EEADR = 20;
  */
 #define MAX_D_INPUTS 6
 boolean DigitalLatch[MAX_D_INPUTS] = {false, false, false, false, false, false};
+boolean DIStatus[MAX_D_INPUTS] = {false, false, false, false, false, false};
 int DigitalInputs[MAX_D_INPUTS] = {2, 3, 4, 5, 6, 7};
 String DIAppId[MAX_D_INPUTS] = {"06", "07", "08", "09", "10", "11"};
 
@@ -142,6 +143,8 @@ String DIAppId[MAX_D_INPUTS] = {"06", "07", "08", "09", "10", "11"};
 #define MAX_A_INPUTS 6
 int AnalogInputs[MAX_A_INPUTS] = {A0, A1, A2, A3, A4, A5};
 String AIAppId[MAX_A_INPUTS] = {"12", "13", "14", "15", "16", "17"};
+int TriggerRelayEnable[MAX_A_INPUTS] = {false, false, false, false, true, true};
+int TriggerThreshold[MAX_A_INPUTS] = {512, 512, 512, 512, 512, 512};
 
 // Data and variables received from especial command
 int Accel[3] = {0, 0, 0};
@@ -207,14 +210,21 @@ void loop() {
     // Take analog samples and send to app
     for (int i = 0; i < MAX_A_INPUTS; i++) {
       int sample = analogRead(AnalogInputs[i]);
+      // Trigger relay output if feature enabled
+      if(TriggerRelayEnable[i]){
+        if(sample > TriggerThreshold[i])
+          setRelayState(i, 1);
+        else
+          setRelayState(i, 0);
+      }
       // Concentrate all samples information in a single data packet
       // Use <Text tags to display alphanumeric information in app
       boardMessage = boardMessage + "<Text" + AIAppId[i] + "Analog: " + String(sample) + "\n";
       // Use <Imgs tags to dinamically change pictures in app
       boardMessage = boardMessage + "<Imgs" + AIAppId[i] + EvaluateAnalogRead(sample) + "\n";
-      // Send all info in a single print
-      myESP_Print(boardMessage, 0);
     }
+    // Send all info in a single print
+    myESP_Print(boardMessage, 0);
   }
 
   // ===========================================================
@@ -258,24 +268,25 @@ void loop() {
   // this condition is true each 1/10 of a second approx
   if (digitalPrescaler++ > 200) {
     digitalPrescaler = 0;
-    boardMessage = "";
     for (int i = 0; i < MAX_D_INPUTS; i++) {
-      if (!digitalRead(DigitalInputs[i])) { // If button pressed
-        boardMessage = boardMessage + "<Imgs" + DIAppId[i] + ":1" + "\n"; // Set image to pressed state
+      if (!digitalRead(DigitalInputs[i])) { // If button pressed 
         // don't change relay status until button has been released and pressed again
         if (DigitalLatch[i]) {
-          setRelayState(i, !digitalRead(RelayPins[i])); // toggle relay 0 state
+          DIStatus[i] = !DIStatus[i];
+          if(DIStatus[i])
+            myESP_Println("<Imgs" + DIAppId[i] + ":1", 0); // Set image to pressed state
+          else
+            myESP_Println("<Imgs" + DIAppId[i] + ":0", 0); // Set image to default state
+          // Uncomment libe below ig you want to turn on or off relays using physical buttons
+          //setRelayState(i, !digitalRead(RelayPins[i])); // toggle relay 0 state
           DigitalLatch[i] = false;
         }
       }
       else {
-        boardMessage = boardMessage + "<Imgs" + DIAppId[i] + ":0" + "\n"; // Set image to default state
         // button released, enable next push
         DigitalLatch[i] = true;
       }
     }
-    // Send all info in a single print
-    myESP_Print(boardMessage, 0);
   }
 }
 
