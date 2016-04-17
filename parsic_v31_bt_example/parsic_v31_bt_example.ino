@@ -25,6 +25,8 @@
 
  For sound alarms: <Alrm00 will make the app beep.
 
+ Make the app vibrate: <Vibr00:YYY\n, YYY is a number from 000 to 999, and represents the vibration time in ms
+
  Make the app talk: Text to Speech tag <TtoS0X:YYYY\n, X is 0 for english and 1 for your default language, YYYY... is any string
  Example: Serial.println("<TtoS00:Hello world");
 
@@ -171,9 +173,9 @@ void loop() {
           setRelayState(i, 0);
       }
       // Use <Text tags to display alphanumeric information in app
-      Serial.println("<Text" + AIAppId[i] + "Analog: " + String(sample));
+      Serial.println("<Text" + AIAppId[i] + ":" + "An: " + String(sample));
       // Use <Imgs tags to dinamically change pictures in app
-      Serial.println("<Imgs" + AIAppId[i] + EvaluateAnalogRead(sample));
+      Serial.println("<Imgs" + AIAppId[i] +  EvaluateAnalogRead(sample));
     }
   }
 
@@ -211,6 +213,8 @@ void loop() {
       // If not '<' or '[' then appData may be for turning on or off relays
       for (int i = 0; i < MAX_RELAYS; i++) {
         if (appData == CMD_ON[i]) {
+          // Example of how to make phone vibrate
+          Serial.println("<Vibr00:100");
           // Example of how to make beep alarm sound
           Serial.println("<Alrm00");
           setRelayState(i, 1);

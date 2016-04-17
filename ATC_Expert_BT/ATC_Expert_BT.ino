@@ -1,71 +1,19 @@
-/* Parsic V31 ESP8266 
- REMEMBER TO REMOVE ESP8266 WHEN UPLOADING SKETCH
- Basic functions to control and display information into the app. This code works for parsic V31 board with ESP8266 connected.
+/*Arduino Total Control for Advanced programers
+ REMEMBER TO REMOVE BLUETOOT WHEN UPLOADING SKETCH
+ Basic functions to control and display information into the app. This code works for parsic V31 board.
 
  * Manual: http://www.parsicitalia.it/files/V31an_09eg524e.pdf
- * ESP8266 Module attached to Serial port
+ * Bluetooth Module attached to Serial port
  * Controls 6 relays connected to RelayPins[MAX_RELAYS]
  * Take analog samples from sensors connected from A0 to A5
  * Buttons from GND to DigitalInputs explains how to manualy turn on/off relays
  * Relay states are remembered
 
- Steps for using the ESP module
- ESP8266 module is a powerfull piece of hardware, but to start using it, you MUST follow the correct steps for wiring,
- network setting, and programming.
+ How to enable analog relay trigger
+ Use TriggerRelayEnable to enable wich analog inputs will trigger their respective relay
+ Use TriggerThreshold to set up the trigger level
 
- Wiring:
- Most ESP modules do not have the pins identified in board, so take into account the following
- <- Antenna facig this way
-
- RXD   *  * Vcc
- GPIO0 *  * RST
- GPIO2 *  * CH_PD
- GND   *  * TXD
-
- Vcc is 3.3V
- RXD goes to your arduino Tx
- TXD goes to your arduino Rx
- GPIO2 goes to Vcc (GPIO0 and GPIO2 not connected on last test)
- CH_PD goes to Vcc
- RST   goes to Vcc
-
- Network Set up:
- Open serial terminal (set it to your module Baud rate, and select both NL & CR
- When sending AT, module must answer "OK", dont proceed until you have the module's ok
-
- Main commands
- Use AT+CWLAP to list all available networks
-
- Use the following sequences to connect to your network
- AT+RST
- AT+GMR
- AT+CWMODE=3
- AT+CWJAP="INFINITUMtcyv","f598702e0c"
-
- Use the following command to check connection, the module ip should appear in the second line.
- If you get 0.0.0.0 means you are not connected yet.
- AT+CIFSR
-
- Finnaly, this works better with 115200 baud rate,
- use: AT+CIOBAUD=115200 to set the new baud rate
-
- 1. AT
- This is just a hello message, and if the ESP-12 is in the correct mode, it will return an "OK" message.
- 2. AT+GMR
- This command returns the firmware version currently on the chip.
- 3. AT+CWMODE?
- This command returns the mode of operation. If the mode is not 3, we will change it to 3 using the following command :
- AT+CWMODE=3
- This mode makes the ESP8266 behave both as a WiFi client as well as a WiFi Access point.
- 4. AT+CWLAP
- The LAP (List Access Points) lists the WiFi networks around. Next, we choose our WiFi network
- 5. AT+CWJAP="your_network_name","your_wifi_network_password"
- This command JAP (Join Access Point) makes the ESP-12 join your WiFi Network.
- 6. AT+CIFSR
- This command returns the IP address of the ESP-12 as the second line and the gateway IP address as the first line if it managed to connect successfully
-
-
- To send data to app use tags:
+ To send data to app use tags:f
  For buttons: (<ButnXX:Y\n), XX 0 to 19 is the button number, Y 0 or 1 is the state
  Example: Serial.println("<Butn05:1"); will turn the app button 5 on
 
@@ -75,9 +23,9 @@
  For images: <ImgsXX:Y\n, XX 0 to 19 is the image number, Y is the image state(0, 1 or 2)to be displayed
  Example: Serial.println("<Imgs02:1"); will change image 2 to the pressed state
 
- Make the app vibrate: <Vibr00:YYY\n, YYY is a number from 000 to 999, and represents the vibration time in ms
-
  For sound alarms: <Alrm00 will make the app beep.
+
+ Make the app vibrate: <Vibr00:YYY\n, YYY is a number from 000 to 999, and represents the vibration time in ms
 
  Make the app talk: Text to Speech tag <TtoS0X:YYYY\n, X is 0 for english and 1 for your default language, YYYY... is any string
  Example: Serial.println("<TtoS00:Hello world");
@@ -107,9 +55,7 @@
 
 // Baud rate for bluetooth module
 // (Default 9600 for most modules)
-#define BAUD_RATE 115200 // TIP> Set your bluetooth baud rate to 115200 for better performance
-#define RX_PIN       0 // Check this out! this is to enable arduino pull up on rx pin, critical!
-String sPort = "80";
+#define BAUD_RATE 9600 // TIP> Set your bluetooth baud rate to 115200 for better performance
 
 // Special commands
 #define CMD_SPECIAL '<'
@@ -152,18 +98,19 @@ int TriggerThreshold[MAX_A_INPUTS] = {512, 512, 512, 512, 512, 512};
 int Accel[3] = {0, 0, 0};
 int SeekBarValue[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 int TouchPadData[24][2]; // 24 max touch pad objects, each one has 2 axis (x and Y)
+String SpeechRecorder = "";
 
 void setup() {
-  // Initialize touch pad data,
+  // Initialize touch pad data, 
   // this is to avoid having random numbers in them
-  for (int i = 0; i < 24; i++) {
+  for(int i = 0; i < 24; i++){
     TouchPadData[i][0] = 0; //X
     TouchPadData[i][1] = 0; //Y
   }
 
-  // initialize WiFI module;
-  myESP_Init();
-
+  // initialize BT Serial port
+  Serial.begin(BAUD_RATE);
+  
   // Initialize digital input ports with input pullup
   for (int i = 0; i < MAX_D_INPUTS; i++) {
     pinMode(DigitalInputs[i], INPUT_PULLUP);
@@ -183,103 +130,128 @@ void setup() {
   RelayStatus = EEPROM.read(STATUS_EEADR);
   for (int i = 0; i < MAX_RELAYS; i++) {
     // Turn on and off according to relay status
-    if ((RelayStatus & (1 << i)) == 0) 
+    if ((RelayStatus & (1 << i)) == 0) {
       digitalWrite(RelayPins[i], LOW);
-    else 
+      Serial.println("<Butn" + RelayAppId[i] + ":0");
+      Serial.println("<Imgs" + RelayAppId[i] + ":0");
+    }
+    else {
       digitalWrite(RelayPins[i], HIGH);
+      Serial.println("<Butn" + RelayAppId[i] + ":1");
+      Serial.println("<Imgs" + RelayAppId[i] + ":1");
+    }
   }
 
   // Greets on top of the app
-  myESP_Println("Parsic V31", 0);
+  Serial.println("Parsic V31");
 
   // Make the app talk in english (lang number 00, use 01 to talk in your default language)
-  myESP_Println("<TtoS00: welcome to Parsic Italia boards", 0);
+  Serial.println("<TtoS00: welcome to Parsic Italia boards");
 }
 
 void loop() {
-  int appData = 0;
-  String appMessage = "";
-  String boardMessage = "";
+  int appData;
+  int testRelay;
   static int analogPrescaler = 0;
   static int digitalPrescaler = 0;
   delay(1);
 
   // ===========================================================
   // This is true each 1/2 second approx.
-  if (analogPrescaler++ > 1000) {
+  if (analogPrescaler++ > 500) {
     analogPrescaler = 0; // Reset prescaler
-    boardMessage = "";
+
     // Take analog samples and send to app
     for (int i = 0; i < MAX_A_INPUTS; i++) {
       int sample = analogRead(AnalogInputs[i]);
       // Trigger relay output if feature enabled
       if(TriggerRelayEnable[i]){
-        if(sample > TriggerThreshold[i])
+        if(sample > TriggerThreshold[i]){
+          // Example of how to make beep alarm sound
+          Serial.println("<Alrm00");
           setRelayState(i, 1);
+        }
         else
           setRelayState(i, 0);
       }
-      // Concentrate all samples information in a single data packet
       // Use <Text tags to display alphanumeric information in app
-      boardMessage = boardMessage + "<Text" + AIAppId[i] + ":" + "An: " + String(sample) + "\n";
+      Serial.println("<Text" + AIAppId[i] + ":" + "An: " + String(sample));
       // Use <Imgs tags to dinamically change pictures in app
-      boardMessage = boardMessage + "<Imgs" + AIAppId[i] + EvaluateAnalogRead(sample) + "\n";
+      Serial.println("<Imgs" + AIAppId[i] +  EvaluateAnalogRead(sample));
     }
-    // Send all info in a single print
-    myESP_Print(boardMessage, 0);
   }
 
   // ===========================================================
   // This is the point were you get data from the App
-  if (Serial.available() > 10) {
-    appMessage = myESP_Read(0);    // Read channel 0
-    appData = appMessage.charAt(0);
+  appData = Serial.read();   // Get a byte from app, if available
+  switch (appData) {
+    case CMD_SPECIAL:
+      // Special command received
+      DecodeSpecialCommand();
 
-    switch (appData) {
-      case CMD_SPECIAL:
-        // Special command received
-        DecodeSpecialCommand(appMessage.substring(1));
+      // Example of how to use seek bar data to dim a LED connected in pin 13
+      // analogWrite(13, SeekBarValue[5]);
 
-        // Example of how to use seek bar data to dim a LED connected in pin 13
-        // analogWrite(13, SeekBarValue[5]);
-        break;
+      // Example of how to use speech recorder
+      testRelay = 0; // this is the relay number which will turn off or on with voice
+      Serial.println("<Text" + RelayAppId[testRelay] + ":" + SpeechRecorder);
+      if(SpeechRecorder.equals("turn off")){
+        setRelayState(testRelay, 0);
+      }
+      if(SpeechRecorder.equals("turn on")){
+        setRelayState(testRelay, 1);
+      }
+      break;
 
-      case CMD_ALIVE:
-        // Character '[' is received every 2.5s, use
-        // this event to refresh the android all relay states
-        displayAllRelayStates();
-        // Greets on top of the app
-        myESP_Println("Parsic V31", 0);
-        break;
-
-      default:
-        // If not '<' or '[' then appData may be for turning on or off relays
-        for (int i = 0; i < MAX_RELAYS; i++) {
-          if (appData == CMD_ON[i]) {
-            setRelayState(i, 1);
-          }
-          else if (appData == CMD_OFF[i])
-            setRelayState(i, 0);
+    case CMD_ALIVE:
+      // Character '[' is received every 2.5s, use
+      // this event to refresh the android all relay states
+      for (int i = 0; i < MAX_RELAYS; i++) {
+        // Refresh button states to app (<BtnXX:Y\n)
+        if (digitalRead(RelayPins[i])) {
+          Serial.println("<Butn" + RelayAppId[i] + ":1");
+          Serial.println("<Imgs" + RelayAppId[i] + ":1");
         }
-    }
+        else {
+          Serial.println("<Butn" + RelayAppId[i] + ":0");
+          Serial.println("<Imgs" + RelayAppId[i] + ":0");
+        }
+      }
+      // Greets on top of the app
+      Serial.println("Parsic V31");
+      break;
+
+    default:
+      // If not '<' or '[' then appData may be for turning on or off relays
+      for (int i = 0; i < MAX_RELAYS; i++) {
+        if (appData == CMD_ON[i]) {
+          // Example of how to make phone vibrate
+          Serial.println("<Vibr00:100");
+          // Example of how to make beep alarm sound
+          Serial.println("<Alrm00");
+          setRelayState(i, 1);
+        }
+        else if (appData == CMD_OFF[i])
+          setRelayState(i, 0);
+      }
   }
 
   // ==========================================================================
   // Manual buttons
   // Here, digital inputs are used to toggle relay outputs in board
   // this condition is true each 1/10 of a second approx
-  if (digitalPrescaler++ > 200) {
+  if (digitalPrescaler++ > 100) {
     digitalPrescaler = 0;
     for (int i = 0; i < MAX_D_INPUTS; i++) {
-      if (!digitalRead(DigitalInputs[i])) { // If button pressed 
-        // don't change relay status until button has been released and pressed again
+      if (!digitalRead(DigitalInputs[i])) { // If button pressed
+        // don't change status until button has been released and pressed again
         if (DigitalLatch[i]) {
           DIStatus[i] = !DIStatus[i];
           if(DIStatus[i])
-            myESP_Println("<Imgs" + DIAppId[i] + ":1", 0); // Set image to pressed state
+            Serial.println("<Imgs" + DIAppId[i] + ":1"); // Set image to pressed state
           else
-            myESP_Println("<Imgs" + DIAppId[i] + ":0", 0); // Set image to default state
-          // Uncomment libe below ig you want to turn on or off relays using physical buttons
+            Serial.println("<Imgs" + DIAppId[i] + ":0"); // Set image to default state
+          // Uncomment line below if you want to turn on and off relays using physical buttons
           //setRelayState(i, !digitalRead(RelayPins[i])); // toggle relay 0 state
           DigitalLatch[i] = false;
         }
@@ -296,42 +268,22 @@ void loop() {
 // relay: 0 to 5 relay number
 // state: 0 is off, 1 is on
 void setRelayState(int relay, int state) {
-  String boardMessage = "";
-
   if (state == 1) {
     digitalWrite(RelayPins[relay], HIGH);           // Write ouput port
-    boardMessage = boardMessage + "<Alrm00" + "\n"; // Example of how to make beep alarm sound
-    boardMessage = boardMessage + "<Butn" + RelayAppId[relay] + ":1\n"; // Feedback button state to app
-    boardMessage = boardMessage + "<Imgs" + RelayAppId[relay] + ":1\n"; // Set image to pressed state
+    Serial.println("<Butn" + RelayAppId[relay] + ":1"); // Feedback button state to app
+    Serial.println("<Imgs" + RelayAppId[relay] + ":1"); // Set image to pressed state
 
     RelayStatus |= (0x01 << relay);                 // Set relay status
     EEPROM.write(STATUS_EEADR, RelayStatus);        // Save new relay status
   }
   else {
     digitalWrite(RelayPins[relay], LOW);            // Write ouput port
-    boardMessage = boardMessage + "<Butn" + RelayAppId[relay] + ":0\n"; // Feedback button state to app
-    boardMessage = boardMessage + "<Imgs" + RelayAppId[relay] + ":0\n"; // Set image to pressed state
+    Serial.println("<Butn" + RelayAppId[relay] + ":0"); // Feedback button state to app
+    Serial.println("<Imgs" + RelayAppId[relay] + ":0"); // Set image to default state
 
     RelayStatus &= ~(0x01 << relay);                // Clear relay status
     EEPROM.write(STATUS_EEADR, RelayStatus);        // Save new relay status
   }
-  myESP_Print(boardMessage, 0);
-}
-
-// Display the current relay states in app
-void displayAllRelayStates() {
-  String boardMessage = "";
-  for (int i = 0; i < MAX_RELAYS; i++) {
-    if (digitalRead(RelayPins[i])) {
-      boardMessage = boardMessage + "<Butn" + RelayAppId[i] + ":1\n"; // Feedback button state to app
-      boardMessage = boardMessage + "<Imgs" + RelayAppId[i] + ":1\n"; // Set image to pressed state
-    }
-    else {
-      boardMessage = boardMessage + "<Butn" + RelayAppId[i] + ":0\n"; // Feedback button state to app
-      boardMessage = boardMessage + "<Imgs" + RelayAppId[i] + ":0\n"; // Set image to pressed state
-    }
-  }
-  myESP_Print(boardMessage, 0);
 }
 
 // Evaluate analog read
@@ -356,7 +308,10 @@ String EvaluateAnalogRead(int analogSample) {
 //   None
 // Output:
 //   None
-void DecodeSpecialCommand(String thisCommand) {
+void DecodeSpecialCommand() {
+  // Read the whole command
+  String thisCommand = Readln();
+
   // First 5 characters will tell us the command type
   String commandType = thisCommand.substring(0, 5);
 
@@ -409,6 +364,11 @@ void DecodeSpecialCommand(String thisCommand) {
     int sbNumber = commandType.charAt(3) & ~0x30;
     SeekBarValue[sbNumber] = commandData.substring(1, 6).toInt();
   }
+
+  if (commandType.equals("StoT:")) {
+    // Next characters are the converted speech
+    SpeechRecorder = thisCommand.substring(5, thisCommand.length() - 1); // there is a trailing character not known
+  }
 }
 
 // Readln
@@ -418,7 +378,6 @@ void DecodeSpecialCommand(String thisCommand) {
 String Readln() {
   char inByte = -1;
   String message = "";
-  int timeoutTimer = 0;
 
   while (inByte != '\n') {
     inByte = -1;
@@ -428,98 +387,7 @@ String Readln() {
 
     if (inByte != -1)
       message.concat(String(inByte));
-
-    // If we dont find a complete line after x time then abort
-    if (timeoutTimer++ > 10000) {
-      message = "";
-      break;
-    }
   }
 
   return message;
 }
-
-/*
- Set up wifi module on Serial, esp on channel 0
- AT+CIPMUX=1
- AT+CIPSERVER=1,80
- When data received: +IPD,0,2:[ (for this exaple 0 is the channel, and 2 is the data lenght)
- Rare error down, blue module uses 1 as channel and black one uses 0
- To send data AT+CIPSEND=0,3 (0: channel, 3 data size)
- */
-void myESP_Init() {
-  // Initialize serial port
-  Serial.begin(BAUD_RATE);
-  pinMode(RX_PIN, INPUT_PULLUP);
-
-  // Reset module
-  Serial.println("AT+RST");
-  delay(5000);
-  // Uncomment lines below to set up network for the first time
-  //Serial.println("AT+CWMODE=3");
-  //delay(100);
-  //Serial.println("AT+CWJAP=\"linksys\",\"\"");
-  //delay(10000);
-  Serial.println("AT+CIPMUX=1");
-  delay(500);
-  Serial.println("AT+CIPSERVER=1," + sPort);
-  delay(500);
-}
-
-// Send string data to app
-void myESP_Println(String data, int channel) {
-  // Get data size, add 2 for nl and cr
-  int dataSize = data.length() + 2;
-
-  // submit cipsend command for channel
-  Serial.println("AT+CIPSEND=" + String(channel) + "," + String(dataSize));
-  Serial.flush(); // wait transmision complete
-  delay(3);       // wait esp module process
-
-  // Print actual data
-  Serial.println(data);
-  Serial.flush(); // wait transmision complete
-  delay(6);       // wait esp module process
-}
-
-// Send string data to app
-void myESP_Print(String data, int channel) {
-  int dataSize = data.length();
-
-  // submit cipsend command for channel
-  Serial.println("AT+CIPSEND=" + String(channel) + "," + String(dataSize));
-  Serial.flush(); // wait transmision complete
-  delay(3);       // wait esp module process
-
-  // Print actual data
-  Serial.print(data);
-  Serial.flush(); // wait transmision complete
-  delay(8);       // wait esp module process, normally used for big data string, wait more
-}
-
-// This read function is faster
-// call this function when you have minimum 9 bytes available
-String myESP_Read(int channel) {
-  String message = "";
-  int plusIndex = -1;
-  String theIPD = "";
-  String dataFromClient = "";
-
-  // Read a complete line
-  dataFromClient = Readln();
-
-  // Find the '+'
-  plusIndex = dataFromClient.indexOf('+');
-  if (plusIndex == -1) return message;
-
-  // If next 3 chars are IPD then this is a good command
-  theIPD = dataFromClient.substring(plusIndex + 1, plusIndex + 4);
-  if (theIPD.equals("IPD")) {
-    // Extract message
-    int twoPointsIndex = dataFromClient.indexOf(':');       // find the ':' on the command
-    message = dataFromClient.substring(twoPointsIndex + 1); // set the message
-  }
-
-  return message;
-}
-
