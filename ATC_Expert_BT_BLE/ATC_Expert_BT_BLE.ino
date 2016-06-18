@@ -15,29 +15,25 @@
 
  To send data to app use tags:f
  For buttons: (<ButnXX:Y\n), XX 0 to 19 is the button number, Y 0 or 1 is the state
- Example: Serial.println("<Butn05:1"); will turn the app button 5 on
+ Example: //Serial.println("<Butn05:1"); will turn the app button 5 on
 
  For texts: <TextXX:YYYY\n, XX 0 to 19 is the text number, YYYY... is the string to be displayed
- Example: Serial.println("<Text01:A1: 253"); will display the text "A1: 253" at text 1
+ Example: //Serial.println("<Text01:A1: 253"); will display the text "A1: 253" at text 1
 
  For images: <ImgsXX:Y\n, XX 0 to 19 is the image number, Y is the image state(0, 1 or 2)to be displayed
- Example: Serial.println("<Imgs02:1"); will change image 2 to the pressed state
+ Example: //Serial.println("<Imgs02:1"); will change image 2 to the pressed state
 
  For sound alarms: <Alrm00 will make the app beep.
 
  Make the app vibrate: <Vibr00:YYY\n, YYY is a number from 000 to 999, and represents the vibration time in ms
 
  Make the app talk: Text to Speech tag <TtoS0X:YYYY\n, X is 0 for english and 1 for your default language, YYYY... is any string
- Example: Serial.println("<TtoS00:Hello world");
+ Example: //Serial.println("<TtoS00:Hello world");
 
  Change the seek bar values in app: <SkbX:YYY\n, where X is the seek bar number from 0 to 7, and YYY is the seek bar value
 
- Use <Abar tags to modify the current analog bar values inapp: <AbarXX:YYY\n, where XX is a number from 0 to 11, the bar number, and YYY is a 3 digit ingeger from 000 to 255, the bar value
-
- Use <Logr tags to store string data in the app temporary log: "<Logr00:" + "any string" + "\n"
-
  If a  no tag new line ending string is sent, it will be displayed at the top of the app
- Example: Serial.println("Hello Word"); "Hello Word" will be displayed at the top of the app
+ Example: //Serial.println("Hello Word"); "Hello Word" will be displayed at the top of the app
 
  Special information can be received from app, for example sensor data and seek bar info:
  * "<PadXxx:YYY\n, xx 00 to 24 is the touch pad number, YYY is the touch pad X axis data 0 to 255
@@ -114,6 +110,7 @@ void setup() {
 
   // initialize BT Serial port
   Serial.begin(BAUD_RATE);
+  Serial.print("AT Coms set 0\n");  
   
   // Initialize digital input ports with input pullup
   for (int i = 0; i < MAX_D_INPUTS; i++) {
@@ -136,21 +133,21 @@ void setup() {
     // Turn on and off according to relay status
     if ((RelayStatus & (1 << i)) == 0) {
       digitalWrite(RelayPins[i], LOW);
-      Serial.println("<Butn" + RelayAppId[i] + ":0");
-      Serial.println("<Imgs" + RelayAppId[i] + ":0");
+      //Serial.println("<Butn" + RelayAppId[i] + ":0");
+      //Serial.println("<Imgs" + RelayAppId[i] + ":0");
     }
     else {
       digitalWrite(RelayPins[i], HIGH);
-      Serial.println("<Butn" + RelayAppId[i] + ":1");
-      Serial.println("<Imgs" + RelayAppId[i] + ":1");
+      //Serial.println("<Butn" + RelayAppId[i] + ":1");
+      //Serial.println("<Imgs" + RelayAppId[i] + ":1");
     }
   }
 
   // Greets on top of the app
-  Serial.println("ATC Expert BT");
+  //Serial.println("ATC Expert BT");
 
   // Make the app talk in english (lang number 00, use 01 to talk in your default language)
-  Serial.println("<TtoS00: welcome to ATC expert");
+  //Serial.println("<TtoS00: welcome to ATC expert");
 }
 
 void loop() {
@@ -162,7 +159,7 @@ void loop() {
 
   // ===========================================================
   // This is true each 1/2 second approx.
-  if (analogPrescaler++ > 100) {
+  if (analogPrescaler++ > 500) {
     analogPrescaler = 0; // Reset prescaler
 
     // Take analog samples and send to app
@@ -172,18 +169,16 @@ void loop() {
       if(TriggerRelayEnable[i]){
         if(sample > TriggerThreshold[i]){
           // Example of how to make beep alarm sound
-          Serial.println("<Alrm00");
+          //Serial.println("<Alrm00");
           setRelayState(i, 1);
         }
         else
           setRelayState(i, 0);
       }
       // Use <Text tags to display alphanumeric information in app
-      Serial.println("<Text" + AIAppId[i] + ":" + "An: " + String(sample));
+      //Serial.println("<Text" + AIAppId[i] + ":" + "An: " + String(sample));
       // Use <Imgs tags to dinamically change pictures in app
-      Serial.println("<Imgs" + AIAppId[i] +  EvaluateAnalogRead(sample));
-      // Use <Abar tags to change analog bar levels from 0 to 255
-      Serial.println("<Abar" + RelayAppId[i] +  ":" + myIntToString(sample >> 2));
+      //Serial.println("<Imgs" + AIAppId[i] +  EvaluateAnalogRead(sample));
     }
   }
 
@@ -200,7 +195,7 @@ void loop() {
 
       // Example of how to use speech recorder
       testRelay = 0; // this is the relay number which will turn off or on with voice
-      Serial.println("<Text" + RelayAppId[testRelay] + ":" + SpeechRecorder); // display received voice command below relay picture
+      //Serial.println("<Text" + RelayAppId[testRelay] + ":" + SpeechRecorder); // display received voice command below relay picture
       if(SpeechRecorder.equals("turn off")){
         setRelayState(testRelay, 0);
       }
@@ -215,16 +210,16 @@ void loop() {
       for (int i = 0; i < MAX_RELAYS; i++) {
         // Refresh button states to app (<BtnXX:Y\n)
         if (digitalRead(RelayPins[i])) {
-          Serial.println("<Butn" + RelayAppId[i] + ":1");
-          Serial.println("<Imgs" + RelayAppId[i] + ":1");
+          //Serial.println("<Butn" + RelayAppId[i] + ":1");
+          //Serial.println("<Imgs" + RelayAppId[i] + ":1");
         }
         else {
-          Serial.println("<Butn" + RelayAppId[i] + ":0");
-          Serial.println("<Imgs" + RelayAppId[i] + ":0");
+          //Serial.println("<Butn" + RelayAppId[i] + ":0");
+          //Serial.println("<Imgs" + RelayAppId[i] + ":0");
         }
       }
       // Greets on top of the app
-      Serial.println("ATC Expert BT");
+      //Serial.println("ATC Expert BT");
       break;
 
     default:
@@ -232,18 +227,13 @@ void loop() {
       for (int i = 0; i < MAX_RELAYS; i++) {
         if (appData == CMD_ON[i]) {
           // Example of how to make phone vibrate
-          Serial.println("<Vibr00:100");
+          //Serial.println("<Vibr00:100");
           // Example of how to make beep alarm sound
-          Serial.println("<Alrm00");
+          //Serial.println("<Alrm00");
           setRelayState(i, 1);
-          Serial.println("<Logr00: Command: " + String(CMD_ON[i]) + " received");
-          Serial.println("<Logr00: Relay: " + String(i) + " turned on");
         }
-        else if (appData == CMD_OFF[i]){
+        else if (appData == CMD_OFF[i])
           setRelayState(i, 0);
-          Serial.println("<Logr00: Command: " + String(CMD_OFF[i]) + " received");
-          Serial.println("<Logr00: Relay: " + String(i) + " turned off");
-        }
       }
   }
 
@@ -259,9 +249,9 @@ void loop() {
         if (DigitalLatch[i]) {
           DIStatus[i] = !DIStatus[i];
           if(DIStatus[i])
-            Serial.println("<Imgs" + DIAppId[i] + ":1"); // Set image to pressed state
-          else
-            Serial.println("<Imgs" + DIAppId[i] + ":0"); // Set image to default state
+            //Serial.println("<Imgs" + DIAppId[i] + ":1"); // Set image to pressed state
+          //else
+            //Serial.println("<Imgs" + DIAppId[i] + ":0"); // Set image to default state
           // Uncomment line below if you want to turn on and off relays using physical buttons
           //setRelayState(i, !digitalRead(RelayPins[i])); // toggle relay 0 state
           DigitalLatch[i] = false;
@@ -281,32 +271,20 @@ void loop() {
 void setRelayState(int relay, int state) {
   if (state == 1) {
     digitalWrite(RelayPins[relay], HIGH);           // Write ouput port
-    Serial.println("<Butn" + RelayAppId[relay] + ":1"); // Feedback button state to app
-    Serial.println("<Imgs" + RelayAppId[relay] + ":1"); // Set image to pressed state
+    //Serial.println("<Butn" + RelayAppId[relay] + ":1"); // Feedback button state to app
+    //Serial.println("<Imgs" + RelayAppId[relay] + ":1"); // Set image to pressed state
 
     RelayStatus |= (0x01 << relay);                 // Set relay status
     EEPROM.write(STATUS_EEADR, RelayStatus);        // Save new relay status
   }
   else {
     digitalWrite(RelayPins[relay], LOW);            // Write ouput port
-    Serial.println("<Butn" + RelayAppId[relay] + ":0"); // Feedback button state to app
-    Serial.println("<Imgs" + RelayAppId[relay] + ":0"); // Set image to default state
+    //Serial.println("<Butn" + RelayAppId[relay] + ":0"); // Feedback button state to app
+    //Serial.println("<Imgs" + RelayAppId[relay] + ":0"); // Set image to default state
 
     RelayStatus &= ~(0x01 << relay);                // Clear relay status
     EEPROM.write(STATUS_EEADR, RelayStatus);        // Save new relay status
   }
-}
-
-// Convert integer integer into 3 digit string
-String myIntToString(int number){
-  if(number < 10){
-    return "00" + String(number);
-  }
-  else if(number < 100){
-    return "0" + String(number);
-  }
-  else
-    return String(number);
 }
 
 // Evaluate analog read

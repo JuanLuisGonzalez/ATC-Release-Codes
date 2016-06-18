@@ -50,14 +50,29 @@ void setup() {
   server.println("Thanks for your support!"); 
 }
 
+
 void loop() {
+  static int disconnectedTimer = 0;
   int appData = -1; 
+  delay(1);
   
   // =========================================================== 
   // This is the point were you get data from the App 
   // Get clients coming from server
-  if(client) appData = client.read();   // Get a byte from app, if available 
-  else client = server.accept();
+  if(client){
+    disconnectedTimer = 0;
+    appData = client.read();   // Get a byte from app, if available 
+  }
+  else{
+    disconnectedTimer++; 
+    client = server.accept();
+  }
+  
+  if(disconnectedTimer > 5000){ // if 5 seconds have elapsed being disconnected, or without getting data from app
+    disconnectedTimer = 0;
+    Bridge.begin();
+    server.begin(); // reset the server
+  }
   
   switch(appData){ 
   case 'A': // Turn on pin 2
@@ -111,7 +126,4 @@ void loop() {
     break; 
   }   
   // ========================================================== 
-
-  // If having problems reconecting enable next line
-  //client.stop();
 }
