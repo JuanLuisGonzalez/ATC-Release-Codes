@@ -3,8 +3,23 @@
  REAL basic functions for controlling stuff via ATC app and wifi module ESP.
  Please use the "example" Codes to get all the awesome features the app has!!!
  If using this sketch, DO NOT ENABLE accelerometer data in the app or seek bars or funny stuff will happen :)
+
+ Wiring:
+ Most ESP modules do not have the pins identified in board, so take into account the following
+ <- Antenna facig this way
+
+ RXD   *  * Vcc
+ GPIO0 *  * RST
+ GPIO2 *  * CH_PD
+ GND   *  * TXD
+
+ Vcc is 3.3V
+ RXD goes to your arduino Tx
+ TXD goes to your arduino Rx
+ GPIO2 goes to Vcc (GPIO0 and GPIO2 not connected on last test)
+ CH_PD goes to Vcc
+ RST   goes to Vcc
  
- * ESP test on arduino pins serial port, pins 0 and 1
  * works well with 3.6V on vcc, themodule seems to overheat by itself
     How to set a Server on port 80:
     Main commands
@@ -57,7 +72,7 @@ void loop() {
   
   // =========================================================== 
   // This is the point were you get data from the App 
-  if(Serial1.available()){
+  if(Serial.available()){
     appMessage = myESP_Read(0);    // Read channel 0
     appData = appMessage.charAt(0);
   }
@@ -126,8 +141,8 @@ String Readln(){
   while(inByte != '\n'){ 
     inByte = -1; 
 
-    if (Serial1.available() > 0) 
-      inByte = Serial1.read(); 
+    if (Serial.available() > 0) 
+      inByte = Serial.read(); 
 
     if(inByte != -1) 
       message.concat(String(inByte)); 
@@ -139,15 +154,15 @@ String Readln(){
 // Set up wifi module on Serial1, esp on channel 0
 void myESP_Init(){
   // Initialize serial port
-  Serial1.begin(BAUD_RATE);
+  Serial.begin(BAUD_RATE);
   pinMode(19, INPUT_PULLUP);
   
   // Reset module
-  Serial1.println("AT+RST");
+  Serial.println("AT+RST");
   delay(4000);
-  Serial1.println("AT+CIPMUX=1");
+  Serial.println("AT+CIPMUX=1");
   delay(500);
-  Serial1.println("AT+CIPSERVER=1," + sPort);
+  Serial.println("AT+CIPSERVER=1," + sPort);
   delay(500);
 }
 
@@ -157,11 +172,11 @@ void myESP_Println(String data, int channel){
   int dataSize = data.length() + 2;
   
   // submit cipsend command for channel
-  Serial1.println("AT+CIPSEND=" + String(channel) + "," + String(dataSize));
+  Serial.println("AT+CIPSEND=" + String(channel) + "," + String(dataSize));
   delay(10); // needed?
   
   // Print actual data
-  Serial1.println(data);
+  Serial.println(data);
 }
 
 // Receive string data from app (a char can be tough as a single character string)
@@ -171,7 +186,7 @@ String myESP_Read(int channel){
   String message = "";
   
   // only if character '+' is received
-  if(Serial1.read() == '+'){
+  if(Serial.read() == '+'){
     dataFromClient = Readln();                                   // read the whole line
     String sCommand = dataFromClient.substring(0, 3);
     if(sCommand.equals("IPD")){                                  // check this is actually the command we expect
