@@ -26,7 +26,7 @@
  TXD goes to your arduino Rx
  GPIO2 goes to Vcc (GPIO0 and GPIO2 not connected on last test)
  CH_PD goes to Vcc
- RST   goes to Vcc
+ RST   goes to Arduino Reset
 
  Network Set up:
  Open serial terminal (set it to your module Baud rate, and select both NL & CR
@@ -495,7 +495,7 @@ void myESP_Println(String data, int channel) {
   // Print actual data
   Serial.println(data);
   Serial.flush(); // wait transmision complete
-  delay(50);       // wait esp module process
+  delay(20);       // wait esp module process
 }
 
 // Send string data to app
@@ -510,7 +510,7 @@ void myESP_Print(String data, int channel) {
   // Print actual data
   Serial.print(data);
   Serial.flush(); // wait transmision complete
-  delay(50);       // wait esp module process, normally used for big data string, wait more
+  delay(20);       // wait esp module process, normally used for big data string, wait more
 }
 
 // This read function is faster
