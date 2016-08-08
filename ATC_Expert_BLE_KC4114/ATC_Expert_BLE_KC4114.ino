@@ -1,15 +1,17 @@
 /*Arduino Total Control for Advanced programers
- REMEMBER TO REMOVE BLUETOOT WHEN UPLOADING SKETCH
- Functions to control and display information into the app. 
- This code works for every arduino board with bluetooth module connected to Serial.
+ REMEMBER TO REMOVE BLUETOOTH WHEN UPLOADING SKETCH
+ Functions to control and display information in the app. 
+ This code works for every arduino board with Kc4114 bluetooth module connected to Serial.
 
- * Bluetooth Module attached to Serial port
+ * 4114 Bluetooth Module attached to Serial port
  * Controls 6 relays connected to RelayPins[MAX_RELAYS]
- * Take analog samples from sensors connected from AnalogInputs[MAX_A_INPUTS] 
- * Buttons from GND to DigitalInputs[MAX_D_INPUTS] explain how to manualy turn on/off relays
+ * Take analog samples from sensors connected from A0 to A5
+ * Buttons connected from GND to DigitalInputs explains how to manualy turn on/off relays
+ * Relay states are remembered
 
  How to enable analog relay trigger
- Use TriggerRelayEnable to enable which analog inputs will trigger their respective relay
+ This features enable turning on and off relays when determinate analog inputs are out of limits
+ Use TriggerRelayEnable to enable wich analog inputs will trigger their respective relay
  Use TriggerThreshold to set up the trigger level
 
  To send data to app use tags:
@@ -22,7 +24,7 @@
  For images: <ImgsXX:Y\n, XX 0 to 19 is the image number, Y is the image state(0, 1 or 2)to be displayed
  Example: Serial.println("<Imgs02:1"); will change image 2 to the pressed state
 
- Make sound alarm: <Alrm00\n will make the app beep.
+ For sound alarms: <Alrm00 will make the app beep.
 
  Make the app vibrate: <Vibr00:YYY\n, YYY is a number from 000 to 999, and represents the vibration time in ms
 
@@ -31,15 +33,14 @@
 
  Change the seek bar values in app: <SkbX:YYY\n, where X is the seek bar number from 0 to 7, and YYY is the seek bar value
 
- Use <Abar tags to modify the current analog bar values inapp: <AbarXX:YYY\n, where XX is a number from 0 to 11, the bar number,
- and YYY is a 3 digit integer from 000 to 255, the bar value
+ Use <Abar tags to modify the current analog bar values inapp: <AbarXX:YYY\n, where XX is a number from 0 to 11, the bar number, and YYY is a 3 digit ingeger from 000 to 255, the bar value
 
  Use <Logr tags to store string data in the app temporary log: "<Logr00:" + "any string" + "\n"
 
- If a no-tag newline ending string is sent, it will be displayed at the top of the app
+ If a no tag-new line ending string is sent, it will be displayed at the top of the app
  Example: Serial.println("Hello Word"); "Hello Word" will be displayed at the top of the app
 
- Special information can be received from app, for example touch pad, sensor data and seek bar info:
+ Special information can be received from app, for example sensor data and seek bar info:
  * "<PadXxx:YYY\n, xx 00 to 24 is the touch pad number, YYY is the touch pad X axis data 0 to 255
  * "<PadYxx:YYY\n, xx 00 to 24 is the touch pad number, YYY is the touch pad Y axis data 0 to 255
  * "<SkbX:SYYYYY\n", X 0 to 7 is the seek bar number, YYYYY is the seek bar value from 0 to 255
@@ -47,10 +48,10 @@
     in m/s^2 multiplied by 100, example: 981 == 9.81m/s^2
  * "S" is the value sign (+ or -)
 
- TIP: To select another serial port use ctr+f, find: Serial change to Serial
+ TIP: To select another serial port use ctr+f, find: Serial change to SerialX
 
  Author: Juan Luis Gonzalez Bello
- Date: Aug 2016
+ Date: Mar 2016
  Get the app: https://play.google.com/store/apps/details?id=com.apps.emim.btrelaycontrol
  ** After copy-paste of this code, use Tools -> Atomatic Format
  */
@@ -58,12 +59,12 @@
 #include <EEPROM.h>
 
 // Baud rate for bluetooth module
-// (Default 9600 for most modules)
 #define BAUD_RATE 115200 // TIP> Set your bluetooth baud rate to 115200 for better performance
 
 // Special commands
-#define CMD_SPECIAL '<'
-#define CMD_ALIVE   '['
+#define CMD_SPECIAL '<' // This is the begining of a special command
+#define CMD_ALIVE   '[' // This command is received from the app every 2.5s
+#define CMD_DATA    '+' // All buttons and images commands should start with "+"
 
 /*
  * Relay outputs config
@@ -104,16 +105,61 @@ int SeekBarValue[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 int TouchPadData[24][2]; // 24 max touch pad objects, each one has 2 axis (x and Y)
 String SpeechRecorder = "";
 
+// Kc4114 specifics
+// All commands from the app that are not special commands must start with + (from buttons)
+String const COMMAND_RESET  = "AT Rset Set";
+static const String COMMAND_BYPASS = "AT Uart Set bypass E";
+static const String COMMAND_COMS   = "AT Coms Set 0";
+
+// Ignore the incoming data when these states are received
+static const String STATE_RSET   = "cmd rset";
+static const String STATE_INIT   = "[init]";
+static const String STATE_IDLE   = "[idle]";
+static const String STATE_FAST   = "[fast]";
+static const String STATE_SLOW   = "[slow]";
+static const String STATE_SCAN   = "[scan]";
+static const String STATE_CCONN  = "[conn]";
+static const String STATE_DCON   = "[dcon]";
+static const String STATE_BONDED = "[bonded]";
+static const String STATE_BOND   = "Bond";
+static const String STATE_CONN   = "Conn";
+static const String STATE_SEND   = "send 1"; 
+static const String IvalidParam  = "ErrInvalidParam";
+
+void Kc4114_begin(long baudRate){
+  Serial.begin(baudRate);
+  Serial.setTimeout(50);
+  Serial.println(COMMAND_RESET);
+  delay(5000);
+  // empty input buffer
+  while(Serial.available() > 0) {
+    char t = Serial.read();
+  }
+  Serial.println(COMMAND_BYPASS);
+  Serial.println(COMMAND_COMS);
+}
+
+void Kc4114_println(String data){
+  Serial.println(data);
+  delay(500);
+}
+
+String Kc4114_readln(){
+  char buffer[50];
+  Serial.readBytesUntil('\n', buffer, 100);  
+  return String(buffer);
+}
+
 void setup() {
+  // Initialize kc module at baud_rate
+  Kc4114_begin(BAUD_RATE);
+  
   // Initialize touch pad data, 
   // this is to avoid having random numbers in them
   for(int i = 0; i < 24; i++){
     TouchPadData[i][0] = 0; //X
     TouchPadData[i][1] = 0; //Y
   }
-
-  // initialize BT Serial port
-  Serial.begin(BAUD_RATE);
   
   // Initialize digital input ports with input pullup
   for (int i = 0; i < MAX_D_INPUTS; i++) {
@@ -136,25 +182,25 @@ void setup() {
     // Turn on and off according to relay status
     if ((RelayStatus & (1 << i)) == 0) {
       digitalWrite(RelayPins[i], LOW);
-      Serial.println("<Butn" + RelayAppId[i] + ":0");
-      Serial.println("<Imgs" + RelayAppId[i] + ":0");
+      Kc4114_println("<Butn" + RelayAppId[i] + ":0");
+      Kc4114_println("<Imgs" + RelayAppId[i] + ":0");
     }
     else {
       digitalWrite(RelayPins[i], HIGH);
-      Serial.println("<Butn" + RelayAppId[i] + ":1");
-      Serial.println("<Imgs" + RelayAppId[i] + ":1");
+      Kc4114_println("<Butn" + RelayAppId[i] + ":1");
+      Kc4114_println("<Imgs" + RelayAppId[i] + ":1");
     }
   }
 
   // Greets on top of the app
-  Serial.println("ATC Expert BT");
+  Kc4114_println("ATC Expert BLE");
 
   // Make the app talk in english (lang number 00, use 01 to talk in your default language)
-  Serial.println("<TtoS00: welcome to ATC expert");
+  Kc4114_println("<TtoS00:Welcome to ATC expert");
 }
 
 void loop() {
-  int appData;
+  String appData = "";
   int testRelay;
   static int analogPrescaler = 0;
   static int digitalPrescaler = 0;
@@ -162,7 +208,7 @@ void loop() {
 
   // ===========================================================
   // This is true each 1/2 second approx.
-  if (analogPrescaler++ > 100) {
+  if (analogPrescaler++ > 500) {
     analogPrescaler = 0; // Reset prescaler
 
     // Take analog samples and send to app
@@ -172,35 +218,35 @@ void loop() {
       if(TriggerRelayEnable[i]){
         if(sample > TriggerThreshold[i]){
           // Example of how to make beep alarm sound
-          Serial.println("<Alrm00");
+          Kc4114_println("<Alrm00");
           setRelayState(i, 1);
         }
         else
           setRelayState(i, 0);
       }
       // Use <Text tags to display alphanumeric information in app
-      Serial.println("<Text" + AIAppId[i] + ":" + "An: " + String(sample));
+      Kc4114_println("<Text" + AIAppId[i] + ":" + "An: " + String(sample));
       // Use <Imgs tags to dinamically change pictures in app
-      Serial.println("<Imgs" + AIAppId[i] +  EvaluateAnalogRead(sample));
+      Kc4114_println("<Imgs" + AIAppId[i] +  EvaluateAnalogRead(sample));
       // Use <Abar tags to change analog bar levels from 0 to 255
-      Serial.println("<Abar" + RelayAppId[i] +  ":" + myIntToString(sample >> 2));
+      Kc4114_println("<Abar" + RelayAppId[i] +  ":" + myIntToString(sample >> 2));
     }
   }
 
   // ===========================================================
   // This is the point were you get data from the App
-  appData = Serial.read();   // Get a byte from app, if available
-  switch (appData) {
+  appData = Kc4114_readln();   // Get a byte from app, if available
+  switch (appData.charAt(0)) {
     case CMD_SPECIAL:
       // Special command received
-      DecodeSpecialCommand();
+      DecodeSpecialCommand(appData.substring(1));
 
       // Example of how to use seek bar data to dim a LED connected in pin 13
       // analogWrite(13, SeekBarValue[5]);
 
       // Example of how to use speech recorder
       testRelay = 0; // this is the relay number which will turn off or on with voice
-      Serial.println("<Text" + RelayAppId[testRelay] + ":" + SpeechRecorder); // display received voice command below relay picture
+      Kc4114_println("<Text" + RelayAppId[testRelay] + ":" + SpeechRecorder); // display received voice command below relay picture
       if(SpeechRecorder.equals("turn off")){
         setRelayState(testRelay, 0);
       }
@@ -215,36 +261,37 @@ void loop() {
       for (int i = 0; i < MAX_RELAYS; i++) {
         // Refresh button states to app (<BtnXX:Y\n)
         if (digitalRead(RelayPins[i])) {
-          Serial.println("<Butn" + RelayAppId[i] + ":1");
-          Serial.println("<Imgs" + RelayAppId[i] + ":1");
+          Kc4114_println("<Butn" + RelayAppId[i] + ":1");
+          Kc4114_println("<Imgs" + RelayAppId[i] + ":1");
         }
         else {
-          Serial.println("<Butn" + RelayAppId[i] + ":0");
-          Serial.println("<Imgs" + RelayAppId[i] + ":0");
+          Kc4114_println("<Butn" + RelayAppId[i] + ":0");
+          Kc4114_println("<Imgs" + RelayAppId[i] + ":0");
         }
       }
       // Greets on top of the app
-      Serial.println("ATC Expert BT");
+      Kc4114_println("ATC Expert BT");
       break;
 
-    default:
+    case CMD_DATA:
       // If not '<' or '[' then appData may be for turning on or off relays
       for (int i = 0; i < MAX_RELAYS; i++) {
-        if (appData == CMD_ON[i]) {
+        if (appData.charAt(1) == CMD_ON[i]) {
           // Example of how to make phone vibrate
-          Serial.println("<Vibr00:100");
+          Kc4114_println("<Vibr00:100");
           // Example of how to make beep alarm sound
-          Serial.println("<Alrm00");
+          Kc4114_println("<Alrm00");
           setRelayState(i, 1);
-          Serial.println("<Logr00: Command: " + String(CMD_ON[i]) + " received");
-          Serial.println("<Logr00: Relay: " + String(i) + " turned on");
+          Kc4114_println("<Logr00: Command: " + String(CMD_ON[i]) + " received");
+          Kc4114_println("<Logr00: Relay: " + String(i) + " turned on");
         }
-        else if (appData == CMD_OFF[i]){
+        else if (appData.charAt(1) == CMD_OFF[i]){
           setRelayState(i, 0);
-          Serial.println("<Logr00: Command: " + String(CMD_OFF[i]) + " received");
-          Serial.println("<Logr00: Relay: " + String(i) + " turned off");
+          Kc4114_println("<Logr00: Command: " + String(CMD_OFF[i]) + " received");
+          Kc4114_println("<Logr00: Relay: " + String(i) + " turned off");
         }
       }
+     break;
   }
 
   // ==========================================================================
@@ -259,9 +306,9 @@ void loop() {
         if (DigitalLatch[i]) {
           DIStatus[i] = !DIStatus[i];
           if(DIStatus[i])
-            Serial.println("<Imgs" + DIAppId[i] + ":1"); // Set image to pressed state
+            Kc4114_println("<Imgs" + DIAppId[i] + ":1"); // Set image to pressed state
           else
-            Serial.println("<Imgs" + DIAppId[i] + ":0"); // Set image to default state
+            Kc4114_println("<Imgs" + DIAppId[i] + ":0"); // Set image to default state
           // Uncomment line below if you want to turn on and off relays using physical buttons
           //setRelayState(i, !digitalRead(RelayPins[i])); // toggle relay 0 state
           DigitalLatch[i] = false;
@@ -281,16 +328,16 @@ void loop() {
 void setRelayState(int relay, int state) {
   if (state == 1) {
     digitalWrite(RelayPins[relay], HIGH);           // Write ouput port
-    Serial.println("<Butn" + RelayAppId[relay] + ":1"); // Feedback button state to app
-    Serial.println("<Imgs" + RelayAppId[relay] + ":1"); // Set image to pressed state
+    Kc4114_println("<Butn" + RelayAppId[relay] + ":1"); // Feedback button state to app
+    Kc4114_println("<Imgs" + RelayAppId[relay] + ":1"); // Set image to pressed state
 
     RelayStatus |= (0x01 << relay);                 // Set relay status
     EEPROM.write(STATUS_EEADR, RelayStatus);        // Save new relay status
   }
   else {
     digitalWrite(RelayPins[relay], LOW);            // Write ouput port
-    Serial.println("<Butn" + RelayAppId[relay] + ":0"); // Feedback button state to app
-    Serial.println("<Imgs" + RelayAppId[relay] + ":0"); // Set image to default state
+    Kc4114_println("<Butn" + RelayAppId[relay] + ":0"); // Feedback button state to app
+    Kc4114_println("<Imgs" + RelayAppId[relay] + ":0"); // Set image to default state
 
     RelayStatus &= ~(0x01 << relay);                // Clear relay status
     EEPROM.write(STATUS_EEADR, RelayStatus);        // Save new relay status
@@ -331,9 +378,9 @@ String EvaluateAnalogRead(int analogSample) {
 //   None
 // Output:
 //   None
-void DecodeSpecialCommand() {
+void DecodeSpecialCommand(String message) {
   // Read the whole command
-  String thisCommand = Readln();
+  String thisCommand = message;
 
   // First 5 characters will tell us the command type
   String commandType = thisCommand.substring(0, 5);
@@ -392,25 +439,4 @@ void DecodeSpecialCommand() {
     // Next characters are the converted speech
     SpeechRecorder = thisCommand.substring(5, thisCommand.length() - 1); // there is a trailing character not known
   }
-}
-
-// Readln
-// Use this function to read a String line from Bluetooth
-// returns: String message, note that this function will pause the program
-//          until a hole line has been read.
-String Readln() {
-  char inByte = -1;
-  String message = "";
-
-  while (inByte != '\n') {
-    inByte = -1;
-
-    if (Serial.available() > 0)
-      inByte = Serial.read();
-
-    if (inByte != -1)
-      message.concat(String(inByte));
-  }
-
-  return message;
 }

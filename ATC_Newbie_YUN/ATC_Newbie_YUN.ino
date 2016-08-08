@@ -122,7 +122,7 @@ void loop() {
   case CMD_ALIVE: 
     // Character '[' is received every 2.5s, use 
     // this event to tell the android we are still here
-    server.println("Please move to example code"); 
+    server.println("Hello ATC!"); 
     break; 
   }   
   // ========================================================== 

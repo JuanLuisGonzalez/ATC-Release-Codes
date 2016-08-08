@@ -16,7 +16,7 @@
  Vcc is 3.3V
  RXD goes to your arduino Tx
  TXD goes to your arduino Rx
- GPIO2 goes to Vcc (GPIO0 and GPIO2 not connected on last test)
+ GPIO0 and GPIO2 not connected
  CH_PD goes to Vcc
  RST   goes to Vcc
  
@@ -124,7 +124,7 @@ void loop() {
   case CMD_ALIVE: 
     // Character '[' is received every 2.5s, use 
     // this event to tell the android we are still here
-    myESP_Println("Please move to example code", 0); 
+    myESP_Println("Hello ATC!", 0); 
     break; 
   }
   // ========================================================== 
@@ -151,7 +151,7 @@ String Readln(){
   return message; 
 }
 
-// Set up wifi module on Serial1, esp on channel 0
+// Set up wifi module on Serial, esp on channel 0
 void myESP_Init(){
   // Initialize serial port
   Serial.begin(BAUD_RATE);

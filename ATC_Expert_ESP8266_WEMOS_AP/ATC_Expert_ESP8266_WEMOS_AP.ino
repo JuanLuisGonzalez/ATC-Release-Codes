@@ -76,11 +76,6 @@
 
  Change the seek bar values in app: <SkbX:YYY\n, where X is the seek bar number from 0 to 7, and YYY is the seek bar value
 
- Use <Abar tags to modify the current analog bar values inapp: <AbarXX:YYY\n, where XX is a number from 0 to 11, the bar number,
- and YYY is a 3 digit integer from 000 to 255, the bar value
-
- Use <Logr tags to store string data in the app temporary log: "<Logr00:" + "any string" + "\n"
-
  If a  no tag new line ending string is sent, it will be displayed at the top of the app
  Example: Serial.println("Hello Word"); "Hello Word" will be displayed at the top of the app
 
@@ -225,8 +220,6 @@ void loop() {
       boardMessage = boardMessage + "<Text" + AIAppId[i] + ":" + "An: " + String(sample) + "\n";
       // Use <Imgs tags to dinamically change pictures in app
       boardMessage = boardMessage + "<Imgs" + AIAppId[i] + EvaluateAnalogRead(sample) + "\n";
-      // Use <Abar tags to change analog bar levels from 0 to 255
-      boardMessage = boardMessage + "<Abar" + RelayAppId[i] +  ":" + myIntToString(sample >> 2) + "\n";
     }
     // Send all info in a single print
     myESP_Print(boardMessage, 0);
@@ -331,18 +324,6 @@ void setRelayState(int relay, int state) {
     EEPROM.write(STATUS_EEADR, RelayStatus);        // Save new relay status
   }
   myESP_Print(boardMessage, 0);
-}
-
-// Convert integer integer into 3 digit string
-String myIntToString(int number){
-  if(number < 10){
-    return "00" + String(number);
-  }
-  else if(number < 100){
-    return "0" + String(number);
-  }
-  else
-    return String(number);
 }
 
 // Display the current relay states in app

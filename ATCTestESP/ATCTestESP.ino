@@ -5,7 +5,7 @@
  Steps for using the ESP module
  ESP8266 module is a powerfull piece of hardware, but to start using it, you MUST follow the correct steps for wiring,
  network setting, and programming.
-
+ 
  Wiring:
  Most ESP modules do not have the pins identified in board, so take into account the following
  <- Antenna facig this way
@@ -18,7 +18,7 @@
  Vcc is 3.3V
  RXD goes to your arduino Tx
  TXD goes to your arduino Rx
- GPIO2 goes to Vcc
+ GPIO0 and GPIO2 not connected
  CH_PD goes to Vcc
  RST   goes to Vcc
 

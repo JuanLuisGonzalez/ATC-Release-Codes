@@ -8,7 +8,7 @@
    * Controls 5 relays (digital outputs) with the first 5 buttons in the app
  
  Author: Juan Luis Gonzalez Bello 
- Date: Feb 2016   
+ Date: Aug 2016   
  Get the app: https://play.google.com/store/apps/details?id=com.apps.emim.btrelaycontrol 
  */
 
@@ -85,7 +85,7 @@ void loop() {
   case CMD_ALIVE: 
     // Character '[' is received every 2.5s, use 
     // this event to tell the android we are still here
-    Serial.println("Please move to example code"); 
+    Serial.println("Hello ATC!"); 
     break; 
   } 
   // ========================================================== 

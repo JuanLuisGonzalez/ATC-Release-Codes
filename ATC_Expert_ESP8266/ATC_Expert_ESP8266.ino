@@ -1,12 +1,11 @@
 /* ATC_Expert_EXP8266
  REMEMBER TO REMOVE ESP8266 WHEN UPLOADING SKETCH
- Basic functions to control and display information into the app. This code works with any arduino board with ESP8266 connected.
+ Functions to control and display information into the app. This code works with any arduino board with ESP8266 connected.
 
  * ESP8266 Module attached to Serial port
  * Controls 6 relays connected to RelayPins[MAX_RELAYS]
- * Take analog samples from sensors connected from A0 to A5
- * Buttons from GND to DigitalInputs explains how to manualy turn on/off relays
- * Relay states are remembered
+ * Take analog samples from sensors connected from AnalogInputs[MAX_A_INPUTS] 
+ * Buttons from GND to DigitalInputs[MAX_D_INPUTS] explain how to manualy turn on/off relays
 
  Steps for using the ESP module
  ESP8266 module is a powerfull piece of hardware, but to start using it, you MUST follow the correct steps for wiring,
@@ -24,7 +23,7 @@
  Vcc is 3.3V
  RXD goes to your arduino Tx
  TXD goes to your arduino Rx
- GPIO2 goes to Vcc (GPIO0 and GPIO2 not connected on last test)
+ GPIO0 and GPIO2 not connected
  CH_PD goes to Vcc
  RST   goes to Vcc
 
@@ -63,7 +62,6 @@
  6. AT+CIFSR
  This command returns the IP address of the ESP-12 as the second line and the gateway IP address as the first line if it managed to connect successfully
 
-
  To send data to app use tags:
  For buttons: (<ButnXX:Y\n), XX 0 to 19 is the button number, Y 0 or 1 is the state
  Example: Serial.println("<Butn05:1"); will turn the app button 5 on
@@ -82,6 +80,11 @@
  Example: Serial.println("<TtoS00:Hello world");
 
  Change the seek bar values in app: <SkbX:YYY\n, where X is the seek bar number from 0 to 7, and YYY is the seek bar value
+
+ Use <Abar tags to modify the current analog bar values inapp: <AbarXX:YYY\n, where XX is a number from 0 to 11, the bar number,
+ and YYY is a 3 digit integer from 000 to 255, the bar value
+
+ Use <Logr tags to store string data in the app temporary log: "<Logr00:" + "any string" + "\n"
 
  If a  no tag new line ending string is sent, it will be displayed at the top of the app
  Example: Serial.println("Hello Word"); "Hello Word" will be displayed at the top of the app
@@ -225,6 +228,8 @@ void loop() {
       boardMessage = boardMessage + "<Text" + AIAppId[i] + ":" + "An: " + String(sample) + "\n";
       // Use <Imgs tags to dinamically change pictures in app
       boardMessage = boardMessage + "<Imgs" + AIAppId[i] + EvaluateAnalogRead(sample) + "\n";
+      // Use <Abar tags to change analog bar levels from 0 to 255
+      boardMessage = boardMessage + "<Abar" + RelayAppId[i] +  ":" + myIntToString(sample >> 2) + "\n";
     }
     // Send all info in a single print
     myESP_Print(boardMessage, 0);
@@ -329,6 +334,18 @@ void setRelayState(int relay, int state) {
     EEPROM.write(STATUS_EEADR, RelayStatus);        // Save new relay status
   }
   myESP_Print(boardMessage, 0);
+}
+
+// Convert integer integer into 3 digit string
+String myIntToString(int number){
+  if(number < 10){
+    return "00" + String(number);
+  }
+  else if(number < 100){
+    return "0" + String(number);
+  }
+  else
+    return String(number);
 }
 
 // Display the current relay states in app

@@ -49,7 +49,7 @@ void setup() {
 } 
 
 void loop() { 
-  int appData; 
+  int appData = -1; 
 
   // =========================================================== 
   // This is the point were you get data from the App 
@@ -106,7 +106,7 @@ void loop() {
   case CMD_ALIVE: 
     // Character '[' is received every 2.5s, use 
     // this event to tell the android we are still here
-    server.println("Please move to example code"); 
+    server.println("Hello ATC!"); 
     break; 
   } 
   // ========================================================== 
