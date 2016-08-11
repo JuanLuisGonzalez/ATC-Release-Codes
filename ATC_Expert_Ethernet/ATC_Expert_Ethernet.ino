@@ -79,7 +79,7 @@ EthernetClient client;
  */
 #define MAX_RELAYS 6
 // Relay 1 is at pin 8, relay 2 is at pin 9 and so on.
-int RelayPins[MAX_RELAYS]  = {8, 9, 10, 11, 12, 13};
+int RelayPins[MAX_RELAYS]  = {4, 5, 6, 7, 8, 9};
 // Relay 1 will report status to toggle button and image 00, relay 2 to button 01 and so on.
 String RelayAppId[MAX_RELAYS] = {"00", "01", "02", "03", "04", "05"};
 // Command list (turn on - off for eachr relay)
@@ -92,11 +92,11 @@ int STATUS_EEADR = 20;
 /*
  * Digital input config
  */
-#define MAX_D_INPUTS 6
-boolean DigitalLatch[MAX_D_INPUTS] = {false, false, false, false, false, false};
-boolean DIStatus[MAX_D_INPUTS] = {false, false, false, false, false, false};
-int DigitalInputs[MAX_D_INPUTS] = {2, 3, 4, 5, 6, 7};
-String DIAppId[MAX_D_INPUTS] = {"06", "07", "08", "09", "10", "11"};
+#define MAX_D_INPUTS 2
+boolean DigitalLatch[MAX_D_INPUTS] = {false, false};
+boolean DIStatus[MAX_D_INPUTS] = {false, false};
+int DigitalInputs[MAX_D_INPUTS] = {2, 3};
+String DIAppId[MAX_D_INPUTS] = {"06", "07"};
 
 /*
  * Analog input config
@@ -171,8 +171,8 @@ void loop() {
   delay(1); 
 
   // ===========================================================
-  // This is true each 1/2 second approx.
-  if (analogPrescaler++ > 100) {
+  // This is true each 1/5 second approx.
+  if (analogPrescaler++ > 200) {
     analogPrescaler = 0; // Reset prescaler
 
     // Take analog samples and send to app
@@ -238,7 +238,7 @@ void loop() {
         }
       }
       // Greets on top of the app
-      server.println("ATC Expert BT");
+      server.println("ATC Expert Eth");
       break;
 
     default:
