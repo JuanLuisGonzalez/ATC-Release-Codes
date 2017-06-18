@@ -33,74 +33,41 @@
  * "S" is the value sign (+ or -)
  
  TIP: To select another Serial port use ctr+f, find: Serial change to SerialX
- 
+ /*
  Author: Juan Luis Gonzalez Bello 
- Date: Nov 2015
+ Date: June 2017
  Get the app: https://play.google.com/store/apps/details?id=com.apps.emim.btrelaycontrol
  ** After copy-paste of this code, use Tools -> Atomatic Format 
  */
 
-#include <Servo.h>
-
 // Baud rate for bluetooth module
 // (Default 9600 for most modules)
-#define BAUD_RATE 115200 // Tip: Configure your bluetooth device for 115200 for better performance  
+#define BAUD_RATE 9600 // Tip: Configure your bluetooth device for 115200 for better performance  
 
 // Special commands
 #define CMD_SPECIAL '<'
 #define CMD_ALIVE   '['
 
-// Insect variables & constants
-#define SERVO_NO 8
-#define INIT_POS 90
-int MAX_POS[SERVO_NO] = {180, 144, 170, 144, 144, 157, 180, 133};
-int MIN_POS[SERVO_NO] = {48,   54,  10,  54,  0,  50,  63,  31};
-
-Servo mServo[SERVO_NO];
-int ServoAngle[SERVO_NO];
-int ServoPINS[SERVO_NO] = {2,3,4,5,6,7,8,9};
+// Return values for special command
+#define UPDATE_FAIL  0
+#define UPDATE_ACCEL 1
+#define UPDATE_SKBAR 2
+#define UPDATE_TPAD  3
+#define UPDATE_SPCH  4
 
 // Data and variables received from especial command
 int Accel[3] = {0, 0, 0}; 
-int SeekBarValue[8] = {INIT_POS,INIT_POS,INIT_POS,INIT_POS,INIT_POS,INIT_POS,INIT_POS,INIT_POS};
+int SeekBarValue[8] = {0,0,0,0,0,0,0,0};
 int TouchPadData[24][2]; // 24 max touch pad objects, each one has 2 axis (x and Y)
 String SpeechRecorder = "";
 
 void setup() {   
   // initialize BT Serial port
   Serial.begin(BAUD_RATE); 
-  mServoInit();
 } 
 
-void mServoInit(){
-  // Initialize servos
-  for(int i = 0; i < SERVO_NO;i++){
-    mServo[i].attach(ServoPINS[i]);
-    ServoAngle[i] = INIT_POS;
-    mServoSetPos(i, INIT_POS);
-  }
-}
-
-void mServoSetPos(int servoNo, int value){
-  if(value > MAX_POS[servoNo]) value = MAX_POS[servoNo];
-  if(value < MIN_POS[servoNo]) value = MIN_POS[servoNo];
-  mServo[servoNo].write(value);
-  ServoAngle[servoNo] = value; 
-}
-
 void loop() { 
-  static int prescaler = 0;
   int appData; 
-  delay(1);
-
-  if(prescaler++ > 100){
-    prescaler = 0;
-    /* Used to test max and min values
-    for(int i = 0; i < SERVO_NO; i++){
-      Serial.println("<Text0" + String(i) + ":value= " + String(ServoAngle[i]));
-      delay(10);
-    }*/
-  }
   
   // ================================================================= 
   // This is the point were you get data from the App 
@@ -109,75 +76,63 @@ void loop() {
   case CMD_SPECIAL: 
     // Special command received, seekbar value and accel value updates 
     DecodeSpecialCommand();
-    for(int i = 0; i < SERVO_NO; i++){
-      mServoSetPos(i, (SeekBarValue[i]*9)/13);
-    }
     break; 
 
   case CMD_ALIVE: 
     // Character '[' is received every 2.5s
-    Serial.print("ATC ready");
+    Serial.println("ATC ready");
     break;
   } 
   // ================================================================= 
 } 
 
-// DecodeSpecialCommand
-//
-// A '<' flags a special command comming from App. Use this function
-// to get Accelerometer data (and other sensors in the future)
-// Input:
-//   None
-// Output:
-//   None
-void DecodeSpecialCommand() {
+/**
+ * DecodeSpecialCommand
+ * A '<' flags a special command comming from App. Use this function 
+ * to get Accelerometer data (and other sensors in the future)
+ * Input:    None 
+ * Output:   None
+ */
+int DecodeSpecialCommand() {
+  int tagType = UPDATE_FAIL;
+  int isAccelData = -1;
+  int isPadData = -1;
+   
   // Read the whole command
   String thisCommand = Readln();
 
   // First 5 characters will tell us the command type
   String commandType = thisCommand.substring(0, 5);
 
-  if (commandType.equals("AccX:")) {
+  if (commandType.equals("AccX:"))
+    isAccelData = 0;
+  if (commandType.equals("AccY:"))
+    isAccelData = 1;
+  if (commandType.equals("AccZ:"))
+    isAccelData = 2;
+ 
+  if(isAccelData!= -1){
     // Next 6 characters will tell us the command data
     String commandData = thisCommand.substring(5, 11);
     if (commandData.charAt(0) == '-') // Negative acceleration
-      Accel[0] = -commandData.substring(1, 6).toInt();
+      Accel[isAccelData] = -commandData.substring(1, 6).toInt();
     else
-      Accel[0] = commandData.substring(1, 6).toInt();
+      Accel[isAccelData] = commandData.substring(1, 6).toInt();
+    tagType = UPDATE_ACCEL;
   }
 
-  if (commandType.equals("AccY:")) {
-    // Next 6 characters will tell us the command data
-    String commandData = thisCommand.substring(5, 11);
-    if (commandData.charAt(0) == '-') // Negative acceleration
-      Accel[1] = -commandData.substring(1, 6).toInt();
-    else
-      Accel[1] = commandData.substring(1, 6).toInt();
-  }
-
-  if (commandType.equals("AccZ:")) {
-    // Next 6 characters will tell us the command data
-    String commandData = thisCommand.substring(5, 11);
-    if (commandData.charAt(0) == '-') // Negative acceleration
-      Accel[2] = -commandData.substring(1, 6).toInt();
-    else
-      Accel[2] = commandData.substring(1, 6).toInt();
-  }
-
-  if (commandType.substring(0, 4).equals("PadX")) {
+  if (commandType.substring(0, 4).equals("PadX"))
+    isPadData = 0;
+  if (commandType.substring(0, 4).equals("PadY"))
+    isPadData = 1;
+      
+  if(isPadData != -1){
     // Next 2 characters will tell us the touch pad number
     int padNumber = thisCommand.substring(4, 6).toInt();
     // Next 3 characters are the X axis data in the message
     String commandData = thisCommand.substring(8, 13);
-    TouchPadData[padNumber][0] = commandData.toInt();
-  }
-
-  if (commandType.substring(0, 4).equals("PadY")) {
-    // Next 2 characters will tell us the touch pad number
-    int padNumber = thisCommand.substring(4, 6).toInt();
-    // Next 3 characters are the Y axis data in the message
-    String commandData = thisCommand.substring(8, 13);
-    TouchPadData[padNumber][1] = commandData.toInt();
+    TouchPadData[padNumber][isPadData] = commandData.toInt();
+    tagType = UPDATE_TPAD;
   }
 
   if (commandType.substring(0, 3).equals("Skb")) {
@@ -185,18 +140,37 @@ void DecodeSpecialCommand() {
     String commandData = thisCommand.substring(5, 11);
     int sbNumber = commandType.charAt(3) & ~0x30;
     SeekBarValue[sbNumber] = commandData.substring(1, 6).toInt();
+    tagType = UPDATE_SKBAR;
   }
 
   if (commandType.equals("StoT:")) {
     // Next characters are the converted speech
     SpeechRecorder = thisCommand.substring(5, thisCommand.length() - 1); // there is a trailing character not known
+    tagType = UPDATE_SPCH;
   }
+  return tagType;
 }
 
-// Readln  
-// Use this function to read a String line from Bluetooth 
-// returns: String message, note that this function will pause the program 
-//          until a hole line has been read. 
+/** 
+ * Convert integer integer into 3 digit string
+ */
+String myIntToString(int number) {
+  if (number < 10) {
+    return "00" + String(number);
+  }
+  else if (number < 100) {
+    return "0" + String(number);
+  }
+  else
+    return String(number);
+}
+
+/** 
+ * Readln
+ * Use this function to read a String line from Bluetooth
+ * returns: String message, note that this function will pause the program
+ *          until a hole line has been read.
+ */ 
 String Readln(){ 
   char inByte = -1; 
   String message = ""; 

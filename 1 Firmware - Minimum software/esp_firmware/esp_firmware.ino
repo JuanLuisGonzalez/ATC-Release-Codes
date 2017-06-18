@@ -96,8 +96,9 @@
 
  TIP: To select another serial port use ctr+f, find: Serial change to Serial
 
+ /*
  Author: Juan Luis Gonzalez Bello
- Date: Mar 2016
+ Date: May 2017
  Get the app: https://play.google.com/store/apps/details?id=com.apps.emim.btrelaycontrol
  ** After copy-paste of this code, use Tools -> Atomatic Format
  */
@@ -111,8 +112,15 @@
 String sPort = "80";
 
 // Special commands
-#define CMD_SPECIAL '<'
 #define CMD_ALIVE   '['
+#define CMD_SPECIAL '<'
+
+// Signal to update special commands
+#define UPDATE_FAIL  0
+#define UPDATE_ACCEL 1
+#define UPDATE_SKBAR 2
+#define UPDATE_TPAD  3
+#define UPDATE_SPCH  4
 
 // Data and variables received from especial command
 int Accel[3] = {0, 0, 0};
@@ -171,7 +179,9 @@ void loop() {
 //   None
 // Output:
 //   None
-void DecodeSpecialCommand(String thisCommand) {
+int DecodeSpecialCommand(String thisCommand) {
+  int tagType = UPDATE_FAIL;
+  
   // First 5 characters will tell us the command type
   String commandType = thisCommand.substring(0, 5);
 
@@ -182,6 +192,7 @@ void DecodeSpecialCommand(String thisCommand) {
       Accel[0] = -commandData.substring(1, 6).toInt();
     else
       Accel[0] = commandData.substring(1, 6).toInt();
+    tagType = UPDATE_ACCEL;
   }
 
   if (commandType.equals("AccY:")) {
@@ -191,6 +202,7 @@ void DecodeSpecialCommand(String thisCommand) {
       Accel[1] = -commandData.substring(1, 6).toInt();
     else
       Accel[1] = commandData.substring(1, 6).toInt();
+    tagType = UPDATE_ACCEL;
   }
 
   if (commandType.equals("AccZ:")) {
@@ -200,6 +212,7 @@ void DecodeSpecialCommand(String thisCommand) {
       Accel[2] = -commandData.substring(1, 6).toInt();
     else
       Accel[2] = commandData.substring(1, 6).toInt();
+    tagType = UPDATE_ACCEL;
   }
 
   if (commandType.substring(0, 4).equals("PadX")) {
@@ -208,6 +221,7 @@ void DecodeSpecialCommand(String thisCommand) {
     // Next 3 characters are the X axis data in the message
     String commandData = thisCommand.substring(8, 13);
     TouchPadData[padNumber][0] = commandData.toInt();
+    tagType = UPDATE_TPAD;
   }
 
   if (commandType.substring(0, 4).equals("PadY")) {
@@ -216,6 +230,7 @@ void DecodeSpecialCommand(String thisCommand) {
     // Next 3 characters are the Y axis data in the message
     String commandData = thisCommand.substring(8, 13);
     TouchPadData[padNumber][1] = commandData.toInt();
+    tagType = UPDATE_TPAD;
   }
 
   if (commandType.substring(0, 3).equals("Skb")) {
@@ -223,12 +238,15 @@ void DecodeSpecialCommand(String thisCommand) {
     String commandData = thisCommand.substring(5, 11);
     int sbNumber = commandType.charAt(3) & ~0x30;
     SeekBarValue[sbNumber] = commandData.substring(1, 6).toInt();
+    tagType = UPDATE_SKBAR;
   }
 
   if (commandType.equals("StoT:")) {
     // Next characters are the converted speech
     SpeechRecorder = thisCommand.substring(5, thisCommand.length() - 1); // there is a trailing character not known
+    tagType = UPDATE_SPCH;
   }
+  return tagType;
 }
 
 // Readln
